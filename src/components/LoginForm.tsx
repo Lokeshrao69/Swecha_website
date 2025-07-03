@@ -149,7 +149,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
         <CardHeader className="text-center pb-8 pt-8">
           <div className="w-24 h-24 mx-auto mb-6 rounded-3xl shadow-xl overflow-hidden">
   <img
-    src="/public/favicon.png"
+    src="/favicon.png"
     alt="Logo"
     className="w-full h-full object-cover"
   />
