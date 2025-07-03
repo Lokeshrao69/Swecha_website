@@ -567,13 +567,92 @@ const UserProfile: React.FC = () => {
     setIsPhoneRevealed(!isPhoneRevealed);
   };
 
-  const handleExport = async () => {
+  const handleExport = () => {
     try {
-      await requestExport();
+      // Prepare the data to export
+      const exportData = {
+        profile: currentUser,
+        contributions: contributions,
+        exportedAt: new Date().toISOString(),
+        exportedBy: currentUser?.name || 'Unknown User'
+      };
+
+      // Convert to JSON string with formatting
+      const fileData = JSON.stringify(exportData, null, 2);
+
+      // Create blob with JSON data
+      const blob = new Blob([fileData], { type: 'application/json' });
+
+      // Create download URL
+      const url = URL.createObjectURL(blob);
+
+      // Create temporary link element
+      const link = document.createElement('a');
+      link.download = `profile-data-${currentUser?.name?.replace(/\s+/g, '-') || 'user'}-${new Date().toISOString().split('T')[0]}.json`;
+      link.href = url;
+
+      // Trigger download
+      document.body.appendChild(link);
+      link.click();
+
+      // Cleanup
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      console.log('✅ Profile data exported successfully');
     } catch (err) {
-      console.error('Export failed:', err);
+      console.error('💥 Export failed:', err);
+      alert('Failed to export profile data');
     }
   };
+
+
+  const handleExportCSV = () => {
+    try {
+      // Prepare CSV data
+      const csvData = [
+        ['Field', 'Value'],
+        ['Name', currentUser?.name || ''],
+        ['Email', currentUser?.email || ''],
+        ['Phone', currentUser?.phone || ''],
+        ['Gender', currentUser?.gender || ''],
+        ['Date of Birth', currentUser?.dateOfBirth || ''],
+        ['Place', currentUser?.place || ''],
+        ['Status', currentUser?.isActive ? 'Active' : 'Inactive'],
+        ['Consent Given', currentUser?.hasGivenConsent ? 'Yes' : 'No'],
+        ['Member Since', formatDate(currentUser?.createdAt || '')],
+        ['Last Login', formatDate(currentUser?.lastLoginAt || '')],
+        ['Text Contributions', contributions?.contributionsByType?.text || 0],
+        ['Audio Contributions', contributions?.contributionsByType?.audio || 0],
+        ['Image Contributions', contributions?.contributionsByType?.image || 0],
+        ['Video Contributions', contributions?.contributionsByType?.video || 0],
+        ['Total Contributions', contributions?.totalContributions || 0],
+      ];
+
+      // Convert to CSV string
+      const csvString = csvData
+        .map(row => row.map(field => `"${field}"`).join(','))
+        .join('\n');
+
+      // Create blob and download
+      const blob = new Blob([csvString], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = `profile-data-${currentUser?.name?.replace(/\s+/g, '-') || 'user'}-${new Date().toISOString().split('T')[0]}.csv`;
+      link.href = url;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      console.log('✅ Profile data exported as CSV successfully');
+    } catch (err) {
+      console.error('💥 CSV export failed:', err);
+      alert('Failed to export profile data as CSV');
+    }
+  };
+
 
   const handleRefresh = () => {
     refetch();
@@ -816,34 +895,25 @@ const UserProfile: React.FC = () => {
         </div>
 
         {/* Export Section */}
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Data Export</h2>
-          <p className="text-sm text-gray-600 mb-4">
-            Export your data in JSON format
-          </p>
+        <div className="flex space-x-2">
           <button
             onClick={handleExport}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+            disabled={!currentUser}
           >
             <Download size={16} />
-            <span>Export Data</span>
+            <span>Export JSON</span>
           </button>
-
-          {exportData && (
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-              <h3 className="font-medium text-gray-900 mb-2">Export Status</h3>
-              <div className="space-y-1 text-sm">
-                <p><span className="font-medium">Task ID:</span> {exportData.task_id}</p>
-                <p><span className="font-medium">Status:</span>
-                  <span className={`ml-1 ${exportData.status === 'completed' ? 'text-green-600' : 'text-orange-600'}`}>
-                    {exportData.status}
-                  </span>
-                </p>
-                <p><span className="font-medium">Message:</span> {exportData.message}</p>
-              </div>
-            </div>
-          )}
+          <button
+            onClick={handleExportCSV}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+            disabled={!currentUser}
+          >
+            <Download size={16} />
+            <span>Export CSV</span>
+          </button>
         </div>
+
       </div>
     </div>
   );
