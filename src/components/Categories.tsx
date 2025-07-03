@@ -588,20 +588,29 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
         {/* Header */}
         <div className="gradient-purple text-white p-4 sm:p-6 rounded-b-3xl shadow-xl">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              
-              <div>
-                <h1 className="text-xl sm:text-2xl font-bold mb-1">
-                  {uploadOptions.find(opt => opt.type === uploadMode)?.title}
-                </h1>
-                <p className="text-purple-100 text-sm sm:text-base">
-                  {selectedCategory.title}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+  <div className="flex items-center justify-between">
+    <Button
+      variant="ghost"
+      className="text-white hover:bg-white/20 flex items-center gap-2"
+      onClick={handleBack}
+    >
+      <ArrowLeft className="w-4 h-4" />
+      Back
+    </Button>
+    <div className="flex items-center gap-4">
+      <div>
+        <h1 className="text-xl sm:text-2xl font-bold mb-1">
+          {uploadOptions.find(opt => opt.type === uploadMode)?.title}
+        </h1>
+        <p className="text-purple-100 text-sm sm:text-base">
+          {selectedCategory.title}
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 
         {/* Upload Form */}
         <div className="px-4 sm:px-6 py-6 sm:py-8">
@@ -995,20 +1004,26 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
         {/* Header */}
         <div className="gradient-purple text-white p-4 sm:p-6 rounded-b-3xl shadow-xl">
-          <div className="flex items-center justify-between">
-            <div>
-             
-              <div>
-                <h1 className="text-xl sm:text-2xl font-bold mb-1">
-                  {selectedCategory.title}
-                </h1>
-                <p className="text-purple-100 text-sm sm:text-base">
-                  Choose how you'd like to contribute
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+  <div className="flex items-center justify-between">
+    <Button
+      variant="ghost"
+      className="text-white hover:bg-white/20 flex items-center gap-2"
+      onClick={handleBack}
+    >
+      <ArrowLeft className="w-4 h-4" />
+      Back
+    </Button>
+    <div>
+      <h1 className="text-xl sm:text-2xl font-bold mb-1">
+        {selectedCategory.title}
+      </h1>
+      <p className="text-purple-100 text-sm sm:text-base">
+        Choose how you'd like to contribute
+      </p>
+    </div>
+  </div>
+</div>
+
 
         {/* Upload Options */}
         <div className="px-4 sm:px-6 py-6 sm:py-8">
