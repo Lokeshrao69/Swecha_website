@@ -70,7 +70,6 @@ const Index = () => {
     return (
       <Categories 
         token={token!} 
-        onBack={handleLogout} // Changed: Now goes directly to login
         onLogout={handleLogout}
         onProfile={() => setCurrentView('profile')}
         onContentInput={() => setCurrentView('content')}

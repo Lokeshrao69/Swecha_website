@@ -590,14 +590,7 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
         <div className="gradient-purple text-white p-4 sm:p-6 rounded-b-3xl shadow-xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-white hover:bg-white/20 w-10 h-10 rounded-full"
-                onClick={handleBack}
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
+              
               <div>
                 <h1 className="text-xl sm:text-2xl font-bold mb-1">
                   {uploadOptions.find(opt => opt.type === uploadMode)?.title}
@@ -1003,15 +996,8 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
         {/* Header */}
         <div className="gradient-purple text-white p-4 sm:p-6 rounded-b-3xl shadow-xl">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-white hover:bg-white/20 w-10 h-10 rounded-full"
-                onClick={handleBack}
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
+            <div>
+             
               <div>
                 <h1 className="text-xl sm:text-2xl font-bold mb-1">
                   {selectedCategory.title}
@@ -1056,15 +1042,8 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
       {/* Header */}
       <div className="gradient-purple text-white p-4 sm:p-6 rounded-b-3xl shadow-xl">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-white hover:bg-white/20 w-10 h-10 rounded-full"
-              onClick={onBack}
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
+          <div>
+            
             <div>
               <h1 className="text-xl sm:text-2xl font-bold mb-1">Categories</h1>
               <p className="text-purple-100 text-sm sm:text-base">
