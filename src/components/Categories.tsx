@@ -816,4 +816,244 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
                       />
                       <label htmlFor="video-upload" className="cursor-pointer">
                         <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                        <p className="text-gray-600
+                         <p className="text-gray-600">
+                          {selectedFile && !recordedBlob ? selectedFile.name : 'Upload Video File'}
+                        </p>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {uploadMode === 'image' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Image Capture *
+                  </label>
+                  <div className="space-y-4">
+                    <Button
+                      onClick={capturePhoto}
+                      className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg"
+                    >
+                      <Camera className="h-5 w-5 mr-2" />
+                      Capture Photo
+                    </Button>
+                    
+                    <div className="text-center text-sm text-gray-500">OR</div>
+                    
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileSelect}
+                        className="hidden"
+                        id="image-upload"
+                      />
+                      <label htmlFor="image-upload" className="cursor-pointer">
+                        <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                        <p className="text-gray-600">
+                          {selectedFile ? selectedFile.name : 'Upload Image File'}
+                        </p>
+                      </label>
+                    </div>
+                    
+                    {selectedFile && selectedFile.type.startsWith('image/') && (
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <img
+                          src={URL.createObjectURL(selectedFile)}
+                          alt="Selected"
+                          className="w-full max-h-64 object-contain rounded"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Hidden elements for capture */}
+              <video ref={videoRef} className="hidden" autoPlay />
+              <canvas ref={canvasRef} className="hidden" />
+
+              {/* Upload Button */}
+              <Button
+                onClick={handleUpload}
+                disabled={uploading || !location || !title.trim() || 
+                  (uploadMode === 'text' && !textContent.trim()) ||
+                  (uploadMode !== 'text' && !selectedFile)}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {uploading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-5 w-5 mr-2" />
+                    Upload Content
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // Upload Options Selection
+  if (showUploadOptions && selectedCategory) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+        {/* Header */}
+        <div className="gradient-purple text-white p-4 sm:p-6 rounded-b-3xl shadow-xl">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-white hover:bg-white/20 w-10 h-10 rounded-full"
+                onClick={() => setShowUploadOptions(false)}
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold mb-1">
+                  Select Content Type
+                </h1>
+                <p className="text-purple-100 text-sm sm:text-base">
+                  {selectedCategory.title}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Upload Options Grid */}
+        <div className="px-4 sm:px-6 py-6 sm:py-8">
+          <div className="max-w-4xl mx-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+              {uploadOptions.map((option) => (
+                <Card
+                  key={option.type}
+                  className="cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-105 border-0 rounded-2xl bg-white/80 backdrop-blur-sm"
+                  onClick={() => handleUploadOptionSelect(option)}
+                >
+                  <CardContent className="p-6 text-center">
+                    <div className="mb-4 text-purple-600">
+                      {option.icon}
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                      {option.title}
+                    </h3>
+                    <p className="text-gray-600 text-sm">
+                      {option.description}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Categories List
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      {/* Header */}
+      <div className="gradient-purple text-white p-4 sm:p-6 rounded-b-3xl shadow-xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white hover:bg-white/20 w-10 h-10 rounded-full"
+              onClick={onBack}
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold mb-1">
+                Choose Category
+              </h1>
+              <p className="text-purple-100 text-sm sm:text-base">
+                Select a category to share your content
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white hover:bg-white/20 w-10 h-10 rounded-full"
+              onClick={onProfile}
+              title="Profile"
+            >
+              <User className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white hover:bg-white/20 w-10 h-10 rounded-full"
+              onClick={onLogout}
+              title="Logout"
+            >
+              <LogOut className="h-5 w-5" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Categories Grid */}
+      <div className="px-4 sm:px-6 py-6 sm:py-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            {categories.map((category) => (
+              <Card
+                key={category.id}
+                className="cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-105 border-0 rounded-2xl bg-white/80 backdrop-blur-sm"
+                onClick={() => handleCategoryClick(category)}
+              >
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="text-3xl">
+                      {getCategoryIcon(category.name)}
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-1">
+                        {category.title}
+                      </h3>
+                      <p className="text-gray-600 text-sm line-clamp-2">
+                        {category.description}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>Rank: {category.rank}</span>
+                    <span>{new Date(category.created_at).toLocaleDateString()}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <style>{`
+        .gradient-purple {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .line-clamp-2 {
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default Categories;
