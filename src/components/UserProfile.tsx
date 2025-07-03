@@ -89,7 +89,7 @@ interface UseUserProfileReturn {
 const baseUrl = 'https://backend2.swecha.org/api/v1/';
 
 // Custom Hook with Debug Statements
-const useUserProfile = (userId?: string): UseUserProfileReturn => {
+const useUserProfile = (userId?: string, shouldReset?: boolean): UseUserProfileReturn => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [dailyStats, setDailyStats] = useState<DailyStats | null>(null);
   const [contributions, setContributions] = useState<UserContributions | null>(null);
@@ -99,6 +99,18 @@ const useUserProfile = (userId?: string): UseUserProfileReturn => {
     contributions: true,
   });
   const [error, setError] = useState<string | null>(null);
+    useEffect(() => { 
+    if (shouldReset) {
+      console.log('🔄 Resetting profile data...');
+      setProfile(null);
+      setContributions(null);
+      setError(null);
+      setLoading({ profile: true, stats: true, contributions: true });
+      
+      // Clear cached data
+      localStorage.removeItem('cachedProfile');
+    }
+  }, [shouldReset]);
   const [exportData, setExportData] = useState<any>(null);
 
   // Enhanced token retrieval with debug
@@ -346,7 +358,7 @@ const useUserProfile = (userId?: string): UseUserProfileReturn => {
 
     try {
       const token = getAuthToken();
-      const response = await fetch(baseUrl + `/api/users/${currentUserId}/`, {
+      const response = await fetch(baseUrl + `/users/${currentUserId}/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -524,8 +536,9 @@ const useUserProfile = (userId?: string): UseUserProfileReturn => {
 };
 
 // Main Component (unchanged from your original)
-const UserProfile:  React.FC<UserProfileProps> = ({ onBack }) => {
+const UserProfile:  React.FC<UserProfileProps> = ({user, token, onLogout, onBack }) => {
   const navigate = useNavigate(); 
+  
   const {
     profile: currentUser,
     dailyStats,

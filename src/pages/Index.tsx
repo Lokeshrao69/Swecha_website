@@ -35,12 +35,20 @@ const Index = () => {
   };
 
   const handleLogout = () => {
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setCurrentView('login');
-  };
+  console.log('🚪 Logging out and clearing all data...');
+  
+  // Clear all authentication and cached data
+  setToken(null);
+  setUser(null);
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  localStorage.removeItem('authToken'); // Clear this too if it exists
+  localStorage.removeItem('cachedProfile'); // Clear cached profile
+  localStorage.clear(); // Or clear everything if needed
+  
+  setCurrentView('login');
+};
+
 
   if (currentView === 'login') {
     return <LoginForm onLoginSuccess={handleLoginSuccess} />;
@@ -49,6 +57,7 @@ const Index = () => {
   if (currentView === 'profile') {
     return (
       <UserProfile 
+        key={user?.id || Date.now()}
         user={user} 
         token={token!} 
         onLogout={handleLogout}
