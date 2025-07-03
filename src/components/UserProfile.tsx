@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Eye, EyeOff, Download, RefreshCw, User, Calendar, MapPin, Phone, Mail, Activity, TrendingUp, Award } from 'lucide-react';
+import { Eye, EyeOff, Download, RefreshCw, User, Calendar, MapPin, Phone, Mail, Activity, TrendingUp, Award, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 // Types
 interface UserProfile {
@@ -62,6 +63,13 @@ interface UserContributions {
     reviewed: boolean;
     title: string;
   }>;
+}
+
+interface UserProfileProps {
+  user: any;
+  token: string;
+  onLogout: () => void;
+  onBack: () => void;
 }
 
 interface UseUserProfileReturn {
@@ -516,7 +524,8 @@ const useUserProfile = (userId?: string): UseUserProfileReturn => {
 };
 
 // Main Component (unchanged from your original)
-const UserProfile: React.FC = () => {
+const UserProfile:  React.FC<UserProfileProps> = ({ onBack }) => {
+  const navigate = useNavigate(); 
   const {
     profile: currentUser,
     dailyStats,
@@ -721,12 +730,19 @@ const UserProfile: React.FC = () => {
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
+              <button
+                onClick={onBack} // or whatever your categories route is
+                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Back to Categories"
+              >
+                <ArrowLeft size={20} />
+              </button>
               <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center text-white text-xl font-semibold">
                 {getInitials(currentUser.name)}
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">{currentUser.name}</h1>
-                <p className="text-gray-600">@{currentUser.username}</p>
+                <p className="text-gray-600">@{currentUser.id}</p>
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(currentUser.isActive)}`}>
                   {getStatusText(currentUser.isActive)}
                 </span>
