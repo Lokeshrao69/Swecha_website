@@ -4,6 +4,32 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, LogOut, Grid3X3, Calendar, User, FileText, Upload, MapPin, Type, Mic, Video, Image, X, Check, AlertCircle, Camera, Square, Play, Pause, RotateCcw } from 'lucide-react';
 import { toast } from "sonner";
 
+// ADD THE JWT DECODER FUNCTION HERE - RIGHT AFTER IMPORTS
+const decodeJWTToken = (token: string): any => {
+  try {
+    // JWT tokens have 3 parts separated by dots: header.payload.signature
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      throw new Error('Invalid JWT token format');
+    }
+
+    // Decode the payload (second part)
+    const payload = parts[1];
+    
+    // Add padding if needed (JWT base64 encoding might not have padding)
+    const paddedPayload = payload + '='.repeat((4 - payload.length % 4) % 4);
+    
+    // Decode base64
+    const decodedPayload = atob(paddedPayload);
+    
+    // Parse JSON
+    return JSON.parse(decodedPayload);
+  } catch (error) {
+    console.error('Error decoding JWT token:', error);
+    return null;
+  }
+};
+
 interface Category {
   id: string;
   name: string;
@@ -47,6 +73,7 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
   const [showManualLocation, setShowManualLocation] = useState(false);
   const [manualLat, setManualLat] = useState('');
   const [manualLng, setManualLng] = useState('');
+  const [userId, setUserId] = useState<string>('');
 
   // Recording states
   const [isRecording, setIsRecording] = useState(false);
@@ -94,6 +121,7 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
 
   useEffect(() => {
     fetchCategories();
+    fetchUserProfile();
   }, []);
 
   useEffect(() => {
@@ -113,6 +141,53 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
       }
     };
   }, [isRecording]);
+
+  // REPLACE YOUR EXISTING fetchUserProfile FUNCTION WITH THIS
+  const fetchUserProfile = async () => {
+    try {
+      // First try to decode user ID from JWT token
+      const tokenPayload = decodeJWTToken(token);
+      if (tokenPayload) {
+        console.log('JWT Token payload:', tokenPayload);
+        // Common JWT payload fields for user ID
+        const userId = tokenPayload.sub || tokenPayload.user_id || tokenPayload.id || tokenPayload.uid;
+        if (userId) {
+          console.log('User ID from token:', userId);
+          setUserId(userId.toString());
+          return; // Exit early if we got the user ID from token
+        }
+      }
+
+      // Fallback: Try to fetch from API
+      const response = await fetch('https://backend2.swecha.org/api/v1/users/profile', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        console.log('User profile response:', userData);
+        
+        // Try multiple possible field names for user ID
+        const userId = userData.id || userData.uid || userData.user_id || userData.sub;
+        if (userId) {
+          setUserId(userId.toString());
+        } else {
+          console.error('User ID not found in profile response:', userData);
+          toast.error("User ID not found. Please try logging in again.");
+        }
+      } else {
+        console.error('Failed to fetch user profile, status:', response.status);
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Profile fetch error:', errorData);
+      }
+    } catch (error) {
+      console.error('User profile error:', error);
+      toast.error("Failed to get user information. Please try logging in again.");
+    }
+  };
 
   const fetchCategories = async () => {
     try {
@@ -401,13 +476,23 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
       return;
     }
 
-    if (uploadMode !== 'text' && !selectedFile) {
-      toast.error("Please select a file or record content");
+    if (!userId) {
+      toast.error("User ID not found. Please try logging in again.");
       return;
     }
 
-    if (uploadMode === 'text' && !textContent.trim()) {
-      toast.error("Please enter text content");
+    // For text uploads, create a text file
+    let fileToUpload = selectedFile;
+    if (uploadMode === 'text') {
+      if (!textContent.trim()) {
+        toast.error("Please enter text content");
+        return;
+      }
+      // Create a text file from the content
+      const textBlob = new Blob([textContent], { type: 'text/plain' });
+      fileToUpload = new File([textBlob], 'text-content.txt', { type: 'text/plain' });
+    } else if (!selectedFile) {
+      toast.error("Please select a file or record content");
       return;
     }
 
@@ -417,33 +502,23 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
       const formData = new FormData();
       formData.append('title', title);
       formData.append('category_id', selectedCategory.id);
+      formData.append('user_id', userId);
+      formData.append('media_type', uploadMode || '');
       formData.append('latitude', location.lat.toString());
       formData.append('longitude', location.lng.toString());
-      formData.append('content_type', uploadMode || '');
-
-      if (uploadMode === 'text') {
-        formData.append('content', textContent);
-      } else if (selectedFile) {
-        formData.append('file', selectedFile);
+      formData.append('use_uid_filename', 'false');
+      
+      if (fileToUpload) {
+        formData.append('file', fileToUpload);
       }
 
-      let endpoint = 'https://backend2.swecha.org/api/v1/content/';
-      
-      switch (uploadMode) {
-        case 'text':
-          endpoint = 'https://backend2.swecha.org/api/v1/content/text/';
-          break;
-        case 'audio':
-          endpoint = 'https://backend2.swecha.org/api/v1/content/audio/';
-          break;
-        case 'video':
-          endpoint = 'https://backend2.swecha.org/api/v1/content/video/';
-          break;
-        case 'image':
-          endpoint = 'https://backend2.swecha.org/api/v1/content/image/';
-          break;
-        default:
-          endpoint = 'https://backend2.swecha.org/api/v1/content/';
+      // Use the single upload endpoint
+      const endpoint = 'https://backend2.swecha.org/api/v1/records/upload';
+
+      console.log('Uploading to:', endpoint);
+      console.log('Form data entries:');
+      for (let [key, value] of formData.entries()) {
+        console.log(key, value);
       }
 
       const response = await fetch(endpoint, {
@@ -460,9 +535,9 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
         toast.success("Content uploaded successfully!");
         handleBack();
       } else {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = await response.json().catch(() => ({ detail: 'Upload failed' }));
         console.error('Upload failed:', errorData);
-        toast.error(errorData.message || "Upload failed. Please try again.");
+        toast.error(errorData.detail || errorData.message || "Upload failed. Please try again.");
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -796,8 +871,13 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
                               Record Again
                             </Button>
                           </div>
-                          <video controls className="w-full rounded-lg" style={{ maxHeight: '300px' }}>
-                            <source src={videoUrl} type="video/webm" />
+                          <video
+                            ref={playbackVideoRef}
+                            controls
+                            className="w-full rounded-lg"
+                            style={{ maxHeight: '300px' }}
+                          >
+                           <source src={videoUrl} type="video/webm" />
                             Your browser does not support the video element.
                           </video>
                         </div>
@@ -816,7 +896,7 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
                       />
                       <label htmlFor="video-upload" className="cursor-pointer">
                         <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                         <p className="text-gray-600">
+                        <p className="text-gray-600">
                           {selectedFile && !recordedBlob ? selectedFile.name : 'Upload Video File'}
                         </p>
                       </label>
@@ -831,69 +911,84 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
                     Image Capture *
                   </label>
                   <div className="space-y-4">
-                    <Button
-                      onClick={capturePhoto}
-                      className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg"
-                    >
-                      <Camera className="h-5 w-5 mr-2" />
-                      Capture Photo
-                    </Button>
-                    
-                    <div className="text-center text-sm text-gray-500">OR</div>
-                    
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileSelect}
-                        className="hidden"
-                        id="image-upload"
-                      />
-                      <label htmlFor="image-upload" className="cursor-pointer">
-                        <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                        <p className="text-gray-600">
-                          {selectedFile ? selectedFile.name : 'Upload Image File'}
-                        </p>
-                      </label>
+                    <div className="grid grid-cols-2 gap-4">
+                      <Button
+                        onClick={capturePhoto}
+                        className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg"
+                      >
+                        <Camera className="h-5 w-5 mr-2" />
+                        Take Photo
+                      </Button>
+                      
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFileSelect}
+                          className="hidden"
+                          id="image-upload"
+                        />
+                        <label htmlFor="image-upload" className="cursor-pointer">
+                          <Upload className="h-6 w-6 text-gray-400 mx-auto mb-1" />
+                          <p className="text-xs text-gray-600">Upload Image</p>
+                        </label>
+                      </div>
                     </div>
                     
-                    {selectedFile && selectedFile.type.startsWith('image/') && (
-                      <div className="p-3 bg-gray-50 rounded-lg">
-                        <img
-                          src={URL.createObjectURL(selectedFile)}
-                          alt="Selected"
-                          className="w-full max-h-64 object-contain rounded"
-                        />
+                    {selectedFile && (
+                      <div className="p-3 bg-green-50 rounded-lg">
+                        <p className="text-sm text-green-700 mb-2">Selected: {selectedFile.name}</p>
+                        {selectedFile.type.startsWith('image/') && (
+                          <img
+                            src={URL.createObjectURL(selectedFile)}
+                            alt="Preview"
+                            className="w-full max-h-48 object-cover rounded-lg"
+                          />
+                        )}
                       </div>
                     )}
+                    
+                    <video
+                      ref={videoRef}
+                      className="hidden"
+                      autoPlay
+                      muted
+                    />
+                    <canvas
+                      ref={canvasRef}
+                      className="hidden"
+                    />
                   </div>
                 </div>
               )}
 
-              {/* Hidden elements for capture */}
-              <video ref={videoRef} className="hidden" autoPlay />
-              <canvas ref={canvasRef} className="hidden" />
-
               {/* Upload Button */}
-              <Button
-                onClick={handleUpload}
-                disabled={uploading || !location || !title.trim() || 
-                  (uploadMode === 'text' && !textContent.trim()) ||
-                  (uploadMode !== 'text' && !selectedFile)}
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {uploading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-5 w-5 mr-2" />
-                    Upload Content
-                  </>
-                )}
-              </Button>
+              <div className="flex gap-3 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={handleBack}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleUpload}
+                  disabled={uploading}
+                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white"
+                >
+                  {uploading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Uploading...
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload
+                    </>
+                  )}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -901,7 +996,7 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
     );
   }
 
-  // Upload Options Selection
+  // Upload Options Modal
   if (showUploadOptions && selectedCategory) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
@@ -913,42 +1008,38 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
                 variant="ghost"
                 size="icon"
                 className="text-white hover:bg-white/20 w-10 h-10 rounded-full"
-                onClick={() => setShowUploadOptions(false)}
+                onClick={handleBack}
               >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               <div>
                 <h1 className="text-xl sm:text-2xl font-bold mb-1">
-                  Select Content Type
+                  {selectedCategory.title}
                 </h1>
                 <p className="text-purple-100 text-sm sm:text-base">
-                  {selectedCategory.title}
+                  Choose how you'd like to contribute
                 </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Upload Options Grid */}
+        {/* Upload Options */}
         <div className="px-4 sm:px-6 py-6 sm:py-8">
-          <div className="max-w-4xl mx-auto">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+          <div className="max-w-2xl mx-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {uploadOptions.map((option) => (
                 <Card
                   key={option.type}
-                  className="cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-105 border-0 rounded-2xl bg-white/80 backdrop-blur-sm"
+                  className="cursor-pointer hover:shadow-lg transition-all duration-200 border-2 hover:border-purple-300 rounded-2xl"
                   onClick={() => handleUploadOptionSelect(option)}
                 >
                   <CardContent className="p-6 text-center">
-                    <div className="mb-4 text-purple-600">
+                    <div className="text-purple-600 mb-4 flex justify-center">
                       {option.icon}
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                      {option.title}
-                    </h3>
-                    <p className="text-gray-600 text-sm">
-                      {option.description}
-                    </p>
+                    <h3 className="font-semibold text-lg mb-2">{option.title}</h3>
+                    <p className="text-gray-600 text-sm">{option.description}</p>
                   </CardContent>
                 </Card>
               ))}
@@ -959,7 +1050,7 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
     );
   }
 
-  // Categories List
+  // Main Categories View
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       {/* Header */}
@@ -975,11 +1066,9 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold mb-1">
-                Choose Category
-              </h1>
+              <h1 className="text-xl sm:text-2xl font-bold mb-1">Categories</h1>
               <p className="text-purple-100 text-sm sm:text-base">
-                Select a category to share your content
+                Choose a category to contribute content
               </p>
             </div>
           </div>
@@ -989,7 +1078,6 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
               size="icon"
               className="text-white hover:bg-white/20 w-10 h-10 rounded-full"
               onClick={onProfile}
-              title="Profile"
             >
               <User className="h-5 w-5" />
             </Button>
@@ -998,7 +1086,6 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
               size="icon"
               className="text-white hover:bg-white/20 w-10 h-10 rounded-full"
               onClick={onLogout}
-              title="Logout"
             >
               <LogOut className="h-5 w-5" />
             </Button>
@@ -1009,49 +1096,29 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
       {/* Categories Grid */}
       <div className="px-4 sm:px-6 py-6 sm:py-8">
         <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
             {categories.map((category) => (
               <Card
                 key={category.id}
-                className="cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-105 border-0 rounded-2xl bg-white/80 backdrop-blur-sm"
+                className="cursor-pointer hover:shadow-lg transition-all duration-200 border-0 rounded-2xl overflow-hidden hover:scale-105"
                 onClick={() => handleCategoryClick(category)}
               >
                 <CardContent className="p-6">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="text-3xl">
-                      {getCategoryIcon(category.name)}
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-1">
-                        {category.title}
-                      </h3>
-                      <p className="text-gray-600 text-sm line-clamp-2">
-                        {category.description}
-                      </p>
-                    </div>
+                  <div className="text-4xl mb-4 text-center">
+                    {getCategoryIcon(category.name)}
                   </div>
-                  <div className="flex items-center justify-between text-xs text-gray-500">
-                    <span>Rank: {category.rank}</span>
-                    <span>{new Date(category.created_at).toLocaleDateString()}</span>
-                  </div>
+                  <h3 className="font-semibold text-lg mb-2 text-center text-gray-800">
+                    {category.title}
+                  </h3>
+                  <p className="text-gray-600 text-sm text-center line-clamp-3">
+                    {category.description}
+                  </p>
                 </CardContent>
               </Card>
             ))}
           </div>
         </div>
       </div>
-
-      <style>{`
-        .gradient-purple {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-        .line-clamp-2 {
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
-      `}</style>
     </div>
   );
 };
