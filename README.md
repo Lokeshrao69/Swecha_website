@@ -1,3 +1,4 @@
+
 # 🌐 Corpus Collection Web App
 
 A responsive website built using React, showcasing Swecha's mission, vision, and activities.
@@ -23,4 +24,5 @@ npm install
 
 3. **Run the development server**
 
+>>>>>>> 7d26793faa7b22f23fe7be1527f72618f5f1c6d4
 npm run dev
