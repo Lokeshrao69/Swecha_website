@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, LogOut, Grid3X3, Calendar, User, FileText, Upload, MapPin, Type, Mic, Video, Image, X, Check, AlertCircle } from 'lucide-react';
+import { ArrowLeft, LogOut, Grid3X3, Calendar, User, FileText, Upload, MapPin, Type, Mic, Video, Image, X, Check, AlertCircle, Camera } from 'lucide-react';
 import { toast } from "sonner";
-import ContentInput from './ContentInput';
+import ContentInput from "./ContentInput";
 
 // ADD THE JWT DECODER FUNCTION HERE - RIGHT AFTER IMPORTS
 const decodeJWTToken = (token: string): any => {
@@ -13,12 +13,16 @@ const decodeJWTToken = (token: string): any => {
     if (parts.length !== 3) {
       throw new Error('Invalid JWT token format');
     }
+
     // Decode the payload (second part)
     const payload = parts[1];
+    
     // Add padding if needed (JWT base64 encoding might not have padding)
     const paddedPayload = payload + '='.repeat((4 - payload.length % 4) % 4);
+    
     // Decode base64
     const decodedPayload = atob(paddedPayload);
+    
     // Parse JSON
     return JSON.parse(decodedPayload);
   } catch (error) {
@@ -63,40 +67,40 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
   const [title, setTitle] = useState('');
   const [textContent, setTextContent] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
+  const [location, setLocation] = useState<{lat: number, lng: number} | null>(null);
   const [uploading, setUploading] = useState(false);
   const [locationError, setLocationError] = useState('');
   const [locationRequested, setLocationRequested] = useState(false);
   const [showManualLocation, setShowManualLocation] = useState(false);
   const [manualLat, setManualLat] = useState('');
   const [manualLng, setManualLng] = useState('');
-  const [userId, setUserId] = useState('');
+  const [userId, setUserId] = useState<string>('');
 
   const uploadOptions: UploadOption[] = [
     {
       type: 'text',
-      icon: <Type className="w-6 h-6" />,
+      icon: <Type className="h-8 w-8" />,
       title: 'Text Input',
       description: 'Type your content',
       accept: ''
     },
     {
       type: 'audio',
-      icon: <Mic className="w-6 h-6" />,
+      icon: <Mic className="h-8 w-8" />,
       title: 'Audio Recording',
       description: 'Record your voice',
       accept: 'audio/*'
     },
     {
       type: 'video',
-      icon: <Video className="w-6 h-6" />,
+      icon: <Video className="h-8 w-8" />,
       title: 'Video Content',
       description: 'Record or upload video',
       accept: 'video/*'
     },
     {
       type: 'image',
-      icon: <Image className="w-6 h-6" />,
+      icon: <Camera className="h-8 w-8" />,
       title: 'Photo Capture',
       description: 'Take or upload photos',
       accept: 'image/*'
@@ -123,7 +127,7 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
           return; // Exit early if we got the user ID from token
         }
       }
-      
+
       // Fallback: Try to fetch from API
       const response = await fetch('https://backend2.swecha.org/api/v1/users/profile', {
         headers: {
@@ -135,6 +139,7 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
       if (response.ok) {
         const userData = await response.json();
         console.log('User profile response:', userData);
+        
         // Try multiple possible field names for user ID
         const userId = userData.id || userData.uid || userData.user_id || userData.sub;
         if (userId) {
@@ -223,7 +228,7 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
   const requestLocation = () => {
     setLocationError('');
     setLocationRequested(true);
-
+    
     if (!navigator.geolocation) {
       setLocationError('Geolocation is not supported by this browser.');
       toast.error("Geolocation not supported");
@@ -247,7 +252,8 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
       (error) => {
         console.error('Location error:', error);
         let errorMessage = 'Location access failed. ';
-        switch (error.code) {
+        
+        switch(error.code) {
           case error.PERMISSION_DENIED:
             errorMessage += 'Please allow location access or enter manually.';
             break;
@@ -261,6 +267,7 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
             errorMessage += 'An unknown error occurred.';
             break;
         }
+        
         setLocationError(errorMessage);
         toast.error(errorMessage);
         setShowManualLocation(true);
@@ -276,22 +283,22 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
   const handleManualLocationSubmit = () => {
     const lat = parseFloat(manualLat);
     const lng = parseFloat(manualLng);
-
+    
     if (isNaN(lat) || isNaN(lng)) {
       toast.error("Please enter valid latitude and longitude values");
       return;
     }
-
+    
     if (lat < -90 || lat > 90) {
       toast.error("Latitude must be between -90 and 90");
       return;
     }
-
+    
     if (lng < -180 || lng > 180) {
       toast.error("Longitude must be between -180 and 180");
       return;
     }
-
+    
     setLocation({ lat, lng });
     setLocationError('');
     setShowManualLocation(false);
@@ -335,7 +342,7 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
       const textBlob = new Blob([textContent], { type: 'text/plain' });
       fileToUpload = new File([textBlob], 'text-content.txt', { type: 'text/plain' });
     } else if (!selectedFile) {
-      toast.error("Please select a file or record content");
+      toast.error("Please select a file");
       return;
     }
 
@@ -350,13 +357,14 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
       formData.append('latitude', location.lat.toString());
       formData.append('longitude', location.lng.toString());
       formData.append('use_uid_filename', 'false');
-
+      
       if (fileToUpload) {
         formData.append('file', fileToUpload);
       }
 
       // Use the single upload endpoint
       const endpoint = 'https://backend2.swecha.org/api/v1/records/upload';
+
       console.log('Uploading to:', endpoint);
       console.log('Form data entries:');
       for (let [key, value] of formData.entries()) {
@@ -385,6 +393,7 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
       console.error('Upload error:', error);
       toast.error("Network error. Please check your connection and try again.");
     }
+
     setUploading(false);
   };
 
@@ -405,93 +414,89 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading categories...</p>
-        </div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
-  // Upload Interface - Use ContentInput component
-  if (uploadMode && selectedCategory) {
-    return (
-      <ContentInput
-        uploadMode={uploadMode}
-        selectedCategory={selectedCategory}
-        title={title}
-        setTitle={setTitle}
-        textContent={textContent}
-        setTextContent={setTextContent}
-        selectedFile={selectedFile}
-        setSelectedFile={setSelectedFile}
-        location={location}
-        setLocation={setLocation}
-        locationError={locationError}
-        setLocationError={setLocationError}
-        showManualLocation={showManualLocation}
-        setShowManualLocation={setShowManualLocation}
-        manualLat={manualLat}
-        setManualLat={setManualLat}
-        manualLng={manualLng}
-        setManualLng={setManualLng}
-        uploading={uploading}
-        token={token}
-        userId={userId}
-        onBack={handleBack}
-        onUpload={handleUpload}
-        requestLocation={requestLocation}
-        handleManualLocationSubmit={handleManualLocationSubmit}
-        handleFileSelect={handleFileSelect}
-      />
-    );
-  }
+  // Upload Interface
+
+if (uploadMode && selectedCategory) {
+  return (
+    <ContentInput
+      uploadMode={uploadMode}
+      selectedCategory={selectedCategory}
+      title={title}
+      setTitle={setTitle}
+      textContent={textContent}
+      setTextContent={setTextContent}
+      selectedFile={selectedFile}
+      setSelectedFile={setSelectedFile}
+      location={location}
+      setLocation={setLocation}
+      locationError={locationError}
+      setLocationError={setLocationError}
+      showManualLocation={showManualLocation}
+      setShowManualLocation={setShowManualLocation}
+      manualLat={manualLat}
+      setManualLat={setManualLat}
+      manualLng={manualLng}
+      setManualLng={setManualLng}
+      uploading={uploading}
+      token={token}
+      userId={userId}
+      onBack={handleBack}
+      onUpload={handleUpload}
+      requestLocation={requestLocation}
+      handleManualLocationSubmit={handleManualLocationSubmit}
+      handleFileSelect={handleFileSelect}
+    />
+  );
+}
 
   // Upload Options Modal
   if (showUploadOptions && selectedCategory) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 p-4">
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <Button
-              onClick={handleBack}
-              variant="ghost"
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-800"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back
-            </Button>
-          </div>
-
-          <Card className="shadow-xl border-0">
-            <CardHeader className="text-center bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-t-lg">
-              <CardTitle className="text-2xl font-bold">{selectedCategory.title}</CardTitle>
-              <p className="text-purple-100 mt-2">Choose how you'd like to contribute</p>
-            </CardHeader>
-
-            <CardContent className="p-8">
-              {/* Upload Options */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {uploadOptions.map((option) => (
-                  <Card
-                    key={option.type}
-                    className="cursor-pointer hover:shadow-lg transition-all duration-200 border-2 hover:border-purple-300"
-                    onClick={() => handleUploadOptionSelect(option)}
-                  >
-                    <CardContent className="p-6 text-center">
-                      <div className="text-purple-600 mb-4 flex justify-center">
-                        {option.icon}
-                      </div>
-                      <h3 className="font-semibold text-lg mb-2">{option.title}</h3>
-                      <p className="text-gray-600 text-sm">{option.description}</p>
-                    </CardContent>
-                  </Card>
-                ))}
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+        {/* Header */}
+        <div className="gradient-purple text-white p-4 sm:p-6 rounded-b-3xl shadow-xl">
+          <div className="flex items-center justify-between">
+            <div>
+             
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold mb-1">
+                  {selectedCategory.title}
+                </h1>
+                <p className="text-purple-100 text-sm sm:text-base">
+                  Choose how you'd like to contribute
+                </p>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
+        </div>
+
+        {/* Upload Options */}
+        <div className="px-4 sm:px-6 py-6 sm:py-8">
+          <div className="max-w-2xl mx-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {uploadOptions.map((option) => (
+                <Card
+                  key={option.type}
+                  className="cursor-pointer hover:shadow-lg transition-all duration-200 border-2 hover:border-purple-300 rounded-2xl"
+                  onClick={() => handleUploadOptionSelect(option)}
+                >
+                  <CardContent className="p-6 text-center">
+                    <div className="text-purple-600 mb-4 flex justify-center">
+                      {option.icon}
+                    </div>
+                    <h3 className="font-semibold text-lg mb-2">{option.title}</h3>
+                    <p className="text-gray-600 text-sm">{option.description}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -499,42 +504,64 @@ const Categories: React.FC<CategoriesProps> = ({ token, onBack, onLogout, onProf
 
   // Main Categories View
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 p-4">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <Card className="mb-8 shadow-lg border-0">
-          <CardHeader className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-t-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-3xl font-bold flex items-center gap-3">
-                  <Grid3X3 className="w-8 h-8" />
-                  Categories
-                </CardTitle>
-                <p className="text-purple-100 mt-2">Choose a category to contribute content</p>
-              </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      {/* Header */}
+      <div className="gradient-purple text-white p-4 sm:p-6 rounded-b-3xl shadow-xl">
+        <div className="flex items-center justify-between">
+          <div>
+            
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold mb-1">Categories</h1>
+              <p className="text-purple-100 text-sm sm:text-base">
+                Choose a category to contribute content
+              </p>
             </div>
-          </CardHeader>
-        </Card>
-
-        {/* Categories Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {categories.map((category) => (
-            <Card
-              key={category.id}
-              className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border-0 shadow-lg"
-              onClick={() => handleCategoryClick(category)}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white hover:bg-white/20 w-10 h-10 rounded-full"
+              onClick={onProfile}
             >
-              <CardContent className="p-6">
-                <div className="text-center">
-                  <div className="text-4xl mb-4">
+              <User className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white hover:bg-white/20 w-10 h-10 rounded-full"
+              onClick={onLogout}
+            >
+              <LogOut className="h-5 w-5" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Categories Grid */}
+      <div className="px-4 sm:px-6 py-6 sm:py-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+            {categories.map((category) => (
+              <Card
+                key={category.id}
+                className="cursor-pointer hover:shadow-lg transition-all duration-200 border-0 rounded-2xl overflow-hidden hover:scale-105"
+                onClick={() => handleCategoryClick(category)}
+              >
+                <CardContent className="p-6">
+                  <div className="text-4xl mb-4 text-center">
                     {getCategoryIcon(category.name)}
                   </div>
-                  <h3 className="font-bold text-xl mb-2 text-gray-800">{category.title}</h3>
-                  <p className="text-gray-600 text-sm leading-relaxed">{category.description}</p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                  <h3 className="font-semibold text-lg mb-2 text-center text-gray-800">
+                    {category.title}
+                  </h3>
+                  <p className="text-gray-600 text-sm text-center line-clamp-3">
+                    {category.description}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       </div>
     </div>
