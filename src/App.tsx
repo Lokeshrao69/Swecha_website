@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
-import CameraCapture from "./components/CameraCapture";
 
 const queryClient = new QueryClient();
 
@@ -25,14 +24,6 @@ const App = () => (
   </QueryClientProvider>
 );
 
-// CameraCapture;
 
-// function App() {
-//   return (
-//     <div className="App">
-//       <CameraCapture />
-//     </div>
-//   );
-// }
 export default App;
 
