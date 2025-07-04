@@ -1,715 +1,793 @@
-
-import React, { useState, useRef, useEffect } from 'react';
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Check, Type, Mic, MicOff, Play, Square, Trash2, Camera, Image, Video, MapPin } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ArrowLeft, MapPin, Type, Mic, Video, Image, X, Check, AlertCircle, Camera, Square, Play, Pause, RotateCcw } from 'lucide-react';
 import { toast } from "sonner";
 
-interface ContentInputProps {
-  token: string;
-  onBack: () => void;
-  categoryId?: string;
-  categoryName?: string;
+interface Category {
+  id: string;
+  name: string;
+  title: string;
+  description: string;
+  published: boolean;
+  rank: number;
+  created_at: string;
+  updated_at: string;
 }
 
-const ContentInput: React.FC<ContentInputProps> = ({ token, onBack, categoryId, categoryName }) => {
-  const [selectedCategory, setSelectedCategory] = useState<string>(categoryName || 'People');
-  const [inputMethod, setInputMethod] = useState<'text' | 'audio' | 'video' | 'image' | null>(null);
-  const [textContent, setTextContent] = useState('');
+interface ContentInputProps {
+  uploadMode: 'text' | 'audio' | 'video' | 'image' | null;
+  selectedCategory: Category;
+  title: string;
+  setTitle: (title: string) => void;
+  textContent: string;
+  setTextContent: (content: string) => void;
+  selectedFile: File | null;
+  setSelectedFile: (file: File | null) => void;
+  location: { lat: number, lng: number } | null;
+  setLocation: (location: { lat: number, lng: number } | null) => void;
+  locationError: string;
+  setLocationError: (error: string) => void;
+  showManualLocation: boolean;
+  setShowManualLocation: (show: boolean) => void;
+  manualLat: string;
+  setManualLat: (lat: string) => void;
+  manualLng: string;
+  setManualLng: (lng: string) => void;
+  uploading: boolean;
+  token: string;
+  userId: string;
+  onBack: () => void;
+  onUpload: () => void;
+  requestLocation: () => void;
+  handleManualLocationSubmit: () => void;
+  handleFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => void;
+}
+
+const ContentInput: React.FC<ContentInputProps> = ({
+  uploadMode,
+  selectedCategory,
+  title,
+  setTitle,
+  textContent,
+  setTextContent,
+  selectedFile,
+  setSelectedFile,
+  location,
+  setLocation,
+  locationError,
+  setLocationError,
+  showManualLocation,
+  setShowManualLocation,
+  manualLat,
+  setManualLat,
+  manualLng,
+  setManualLng,
+  uploading,
+  token,
+  userId,
+  onBack,
+  onUpload,
+  requestLocation,
+  handleManualLocationSubmit,
+  handleFileSelect
+}) => {
+  // Recording states
   const [isRecording, setIsRecording] = useState(false);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
-  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [recordingTime, setRecordingTime] = useState(0);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [location, setLocation] = useState<{latitude: number, longitude: number} | null>(null);
-  const [locationPermission, setLocationPermission] = useState<'granted' | 'denied' | 'prompt'>('prompt');
-  
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const videoRecorderRef = useRef<MediaRecorder | null>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+
+
   const videoRef = useRef<HTMLVideoElement>(null);
+  const videoCaptureRef = useRef<HTMLVideoElement>(null);
+  const videoRecordingRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const recordingInterval = useRef<NodeJS.Timeout | null>(null);
+
+  const uploadOptions = [
+    {
+      type: 'text' as const,
+      icon: <Type className="w-6 h-6" />,
+      title: 'Text Input',
+      description: 'Type your content',
+      accept: ''
+    },
+    {
+      type: 'audio' as const,
+      icon: <Mic className="w-6 h-6" />,
+      title: 'Audio Recording',
+      description: 'Record your voice',
+      accept: 'audio/*'
+    },
+    {
+      type: 'video' as const,
+      icon: <Video className="w-6 h-6" />,
+      title: 'Video Content',
+      description: 'Record or upload video',
+      accept: 'video/*'
+    },
+    {
+      type: 'image' as const,
+      icon: <Image className="w-6 h-6" />,
+      title: 'Photo Capture',
+      description: 'Take or upload photos',
+      accept: 'image/*'
+    }
+  ];
 
   useEffect(() => {
+    if (isRecording) {
+      recordingInterval.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (recordingInterval.current) {
+        clearInterval(recordingInterval.current);
+      }
+    }
     return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
+      if (recordingInterval.current) {
+        clearInterval(recordingInterval.current);
       }
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
-      if (videoUrl) URL.revokeObjectURL(videoUrl);
-      if (imageUrl) URL.revokeObjectURL(imageUrl);
     };
-  }, [audioUrl, videoUrl, imageUrl]);
+  }, [isRecording]);
 
-  const requestLocationPermission = async () => {
-    if (!navigator.geolocation) {
-      toast.error("Geolocation is not supported by this browser");
-      return false;
-    }
-
+  const startRecording = async (type: 'audio' | 'video') => {
     try {
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 300000
-        });
-      });
+      const constraints = type === 'audio'
+        ? { audio: true }
+        : {
+          audio: true,
+          video: {
+            facingMode: 'user',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        };
 
-      setLocation({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude
-      });
-      setLocationPermission('granted');
-      toast.success("Location permission granted");
-      return true;
-    } catch (error) {
-      console.error('Location error:', error);
-      setLocationPermission('denied');
-      toast.error("Location permission denied. Please enable location access.");
-      return false;
-    }
-  };
+      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+      setStream(mediaStream);
 
-  const startAudioRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
+      if (type === 'video' && videoRecordingRef.current) {
+        const video = videoRecordingRef.current;
+        video.srcObject = mediaStream;
+        video.autoplay = true;
+        video.muted = true;
+        video.playsInline = true;
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        setAudioBlob(blob);
-        const url = URL.createObjectURL(blob);
-        setAudioUrl(url);
-        stream.getTracks().forEach(track => track.stop());
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-      setRecordingTime(0);
-
-      timerRef.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
-      }, 1000);
-
-      toast.success("Audio recording started");
-    } catch (error) {
-      toast.error("Failed to start audio recording. Please check microphone permissions.");
-    }
-  };
-
-  const startVideoRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      videoRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        video.onloadedmetadata = () => {
+          video.play().catch(error => {
+            console.error('Video play error:', error);
+            toast.error('Failed to start video preview');
+          });
+        };
       }
+      const recorder = new MediaRecorder(mediaStream);
+      const chunks: BlobPart[] = [];
 
-      mediaRecorder.ondataavailable = (event) => {
+      recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
-          chunksRef.current.push(event.data);
+          chunks.push(event.data);
         }
       };
 
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-        setVideoBlob(blob);
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, {
+          type: type === 'audio' ? 'audio/webm' : 'video/webm'
+        });
+        setRecordedBlob(blob);
+        setSelectedFile(new File([blob], `recorded-${type}.webm`, {
+          type: blob.type
+        }));
         const url = URL.createObjectURL(blob);
-        setVideoUrl(url);
-        stream.getTracks().forEach(track => track.stop());
-        if (videoRef.current) {
-          videoRef.current.srcObject = null;
+        if (type === 'audio') {
+          setAudioUrl(url);
+        } else {
+          setVideoUrl(url);
         }
       };
 
-      mediaRecorder.start();
+      recorder.start();
+      setMediaRecorder(recorder);
       setIsRecording(true);
       setRecordingTime(0);
-
-      timerRef.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
-      }, 1000);
-
-      toast.success("Video recording started");
+      toast.success(`${type === 'audio' ? 'Audio' : 'Video'} recording started`);
     } catch (error) {
-      toast.error("Failed to start video recording. Please check camera permissions.");
+      console.error('Recording error:', error);
+      toast.error(`Failed to start ${type} recording. Please check permissions.`);
     }
   };
 
   const stopRecording = () => {
-    if (inputMethod === 'audio' && mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-    } else if (inputMethod === 'video' && videoRecorderRef.current && isRecording) {
-      videoRecorderRef.current.stop();
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
     }
-    
+
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+
     setIsRecording(false);
-    
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    
-    toast.success("Recording completed");
+    setMediaRecorder(null);
+    toast.success('Recording stopped');
   };
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setImageFile(file);
-      const url = URL.createObjectURL(file);
-      setImageUrl(url);
-      toast.success("Image selected");
+  const capturePhoto = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      });
+
+      // Store the stream for later cleanup
+      setCameraStream(mediaStream);
+      setIsCameraActive(true);
+
+      if (videoRef.current && canvasRef.current) {
+        const video = videoRef.current as HTMLVideoElement;
+        const canvas = canvasRef.current as HTMLCanvasElement;
+
+        video.srcObject = mediaStream;
+        video.autoplay = true;
+        video.muted = true;
+        video.playsInline = true;
+
+        await new Promise((resolve, reject) => {
+          video.onloadedmetadata = () => {
+            video.play().then(() => {
+              setTimeout(() => {
+                try {
+                  canvas.width = video.videoWidth || 640;
+                  canvas.height = video.videoHeight || 480;
+                  const ctx = canvas.getContext('2d');
+
+                  if (ctx && video.videoWidth > 0 && video.videoHeight > 0) {
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                    canvas.toBlob((blob) => {
+                      if (blob) {
+                        setSelectedFile(new File([blob], 'captured-photo.jpg', { type: 'image/jpeg' }));
+                        toast.success('Photo captured! Click "Stop Camera" when done.');
+                        resolve(blob);
+                      } else {
+                        reject(new Error('Failed to create blob'));
+                      }
+                    }, 'image/jpeg', 0.9);
+                  } else {
+                    reject(new Error('Video not ready'));
+                  }
+                } catch (error) {
+                  reject(error);
+                }
+              }, 1000);
+            }).catch(reject);
+          };
+          video.onerror = reject;
+        });
+      }
+    } catch (error) {
+      console.error('Photo capture error:', error);
+      toast.error('Failed to capture photo. Please check camera permissions.');
     }
   };
+
+  // Add a separate function to stop the camera
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+      setIsCameraActive(false);
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    }
+  };
+
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleSubmit = async () => {
-    if (!inputMethod) {
-      toast.error("Please select an input method");
-      return;
-    }
-
-    if (inputMethod === 'text' && !textContent.trim()) {
-      toast.error("Please enter some text content");
-      return;
-    }
-
-    if (inputMethod === 'audio' && !audioBlob) {
-      toast.error("Please record some audio content");
-      return;
-    }
-
-    if (inputMethod === 'video' && !videoBlob) {
-      toast.error("Please record some video content");
-      return;
-    }
-
-    if (inputMethod === 'image' && !imageFile) {
-      toast.error("Please select an image");
-      return;
-    }
-
-    // Request location permission before submission
-    const hasLocation = await requestLocationPermission();
-    if (!hasLocation) {
-      toast.error("Location permission is required for submission");
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      const formData = new FormData();
-      formData.append('category_id', categoryId || '');
-      formData.append('content_type', inputMethod);
-      
-      if (location) {
-        formData.append('latitude', location.latitude.toString());
-        formData.append('longitude', location.longitude.toString());
-      }
-
-      if (inputMethod === 'text') {
-        formData.append('text_content', textContent);
-      } else if (inputMethod === 'audio' && audioBlob) {
-        formData.append('audio_file', audioBlob, 'recording.webm');
-      } else if (inputMethod === 'video' && videoBlob) {
-        formData.append('video_file', videoBlob, 'recording.webm');
-      } else if (inputMethod === 'image' && imageFile) {
-        formData.append('image_file', imageFile);
-      }
-
-      const response = await fetch('https://backend2.swecha.org/api/v1/content/submit', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      if (response.ok) {
-        toast.success(`Content submitted successfully!`);
-        
-        // Reset form
-        setTextContent('');
-        setAudioBlob(null);
-        setVideoBlob(null);
-        setImageFile(null);
-        setAudioUrl(null);
-        setVideoUrl(null);
-        setImageUrl(null);
-        setInputMethod(null);
-        setRecordingTime(0);
-      } else {
-        const errorData = await response.json();
-        toast.error(errorData.detail || "Failed to submit content");
-      }
-    } catch (error) {
-      toast.error("Network error. Please try again.");
-    }
-
-    setIsSubmitting(false);
+  const resetRecording = () => {
+    setRecordedBlob(null);
+    setSelectedFile(null);
+    setRecordingTime(0);
+    setAudioUrl(null);
+    setVideoUrl(null);
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    if (videoUrl) URL.revokeObjectURL(videoUrl);
   };
 
-  if (!inputMethod) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <div className="bg-white border-b p-4">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={onBack}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div>
-              <h1 className="text-xl font-semibold">Choose Input Method</h1>
-              <p className="text-sm text-gray-600">How would you like to share your content?</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-6 space-y-6">
-          {/* Selected Category */}
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex flex-col items-center space-y-4">
-                <div className="w-16 h-16 gradient-purple rounded-2xl flex items-center justify-center">
-                  <Check className="h-8 w-8 text-white" />
-                </div>
-                <div className="text-center">
-                  <p className="text-gray-600 mb-2">Selected Category</p>
-                  <Badge className="gradient-purple text-white px-4 py-2 text-lg">
-                    {selectedCategory}
-                  </Badge>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Location Permission */}
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-lg">
-                <MapPin className="h-5 w-5 text-blue-600" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-blue-800">Location Required</p>
-                  <p className="text-xs text-blue-600">Location permission will be requested before submission</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Input Method Selection */}
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <Type className="h-5 w-5 text-purple-500" />
-              <h2 className="text-lg font-semibold">Select Input Method</h2>
-            </div>
-            <p className="text-sm text-gray-600 mb-4">Choose how you want to add your content</p>
-
-            <div className="grid grid-cols-2 gap-4">
-              {/* Text Input */}
-              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setInputMethod('text')}>
-                <CardContent className="pt-6">
-                  <div className="flex flex-col items-center space-y-4">
-                    <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center">
-                      <Type className="h-8 w-8 text-green-600" />
-                    </div>
-                    <div className="text-center">
-                      <h3 className="font-semibold text-lg">Text</h3>
-                      <p className="text-gray-600 text-sm">Type your content</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Audio Recording */}
-              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setInputMethod('audio')}>
-                <CardContent className="pt-6">
-                  <div className="flex flex-col items-center space-y-4">
-                    <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center">
-                      <Mic className="h-8 w-8 text-blue-600" />
-                    </div>
-                    <div className="text-center">
-                      <h3 className="font-semibold text-lg">Audio</h3>
-                      <p className="text-gray-600 text-sm">Record your voice</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Video Recording */}
-              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setInputMethod('video')}>
-                <CardContent className="pt-6">
-                  <div className="flex flex-col items-center space-y-4">
-                    <div className="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center">
-                      <Video className="h-8 w-8 text-red-600" />
-                    </div>
-                    <div className="text-center">
-                      <h3 className="font-semibold text-lg">Video</h3>
-                      <p className="text-gray-600 text-sm">Record a video</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Image Upload */}
-              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setInputMethod('image')}>
-                <CardContent className="pt-6">
-                  <div className="flex flex-col items-center space-y-4">
-                    <div className="w-16 h-16 bg-orange-100 rounded-2xl flex items-center justify-center">
-                      <Image className="h-8 w-8 text-orange-600" />
-                    </div>
-                    <div className="text-center">
-                      <h3 className="font-semibold text-lg">Image</h3>
-                      <p className="text-gray-600 text-sm">Upload a picture</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleFileSelectInternal = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      setRecordedBlob(null);
+      setAudioUrl(null);
+      setVideoUrl(null);
+    }
+    handleFileSelect(event);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b p-4">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => setInputMethod(null)}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-xl font-semibold">
-              {inputMethod === 'text' && 'Text Input'}
-              {inputMethod === 'audio' && 'Audio Recording'}
-              {inputMethod === 'video' && 'Video Recording'}
-              {inputMethod === 'image' && 'Image Upload'}
-            </h1>
-            <p className="text-sm text-gray-600">Category: {selectedCategory}</p>
-          </div>
-        </div>
-      </div>
+     {/* Full-width Purple Header Bar */}
+{/* Full-width Purple Header Bar */}
+<div className="bg-gradient-to-r from-purple-500 via-purple-600 to-purple-700 text-white px-6 py-6 shadow-lg relative">
+  {/* Back Button - Positioned at absolute left */}
+ <Button
+    onClick={onBack}
+    variant="ghost"
+    size="sm"
+    className="absolute left-2 md:left-4 top-1/2 transform -translate-y-1/2 text-white hover:bg-white/20 rounded-lg z-10
+               /* Mobile styles */
+               w-10 h-10 p-0 md:w-auto md:h-auto md:p-2
+               /* Hide text on mobile, show on desktop */
+               "
+  >
+    <ArrowLeft className="w-4 h-4 md:mr-2" />
+    <span className="hidden md:inline">Back</span>
+  </Button>
+  
+  
+  {/* Center Content */}
+  <div className="max-w-4xl mx-auto text-center">
+    <h1 className="text-2xl font-bold">
+      {uploadOptions.find(opt => opt.type === uploadMode)?.title}
+    </h1>
+    <p className="text-purple-100 text-sm mt-1">
+      {selectedCategory.title}
+    </p>
+  </div>
+</div>
 
-      <div className="p-6 space-y-6">
-        {/* Text Input */}
-        {inputMethod === 'text' && (
-          <Card className="animate-fade-in-up">
-            <CardHeader>
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <Type className="h-5 w-5 text-green-600" />
-                Enter Your Content
-              </h3>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Textarea
-                placeholder="Type your content here..."
-                value={textContent}
-                onChange={(e) => setTextContent(e.target.value)}
-                rows={8}
-                className="resize-none"
-              />
-              <div className="flex justify-between items-center text-sm text-gray-500">
-                <span>Words: {textContent.split(' ').filter(word => word.length > 0).length}</span>
-                <span>Characters: {textContent.length}</span>
+
+
+      {/* Main Content Area */}
+      <div className="max-w-4xl mx-auto px-6 py-8">
+        <Card className="bg-white shadow-lg border-0 rounded-xl overflow-hidden">
+          <CardContent className="p-8">
+            {/* Upload Form Header */}
+            <div className="flex items-center mb-8">
+              <div className="bg-purple-100 p-3 rounded-lg mr-4">
+                {uploadOptions.find(opt => opt.type === uploadMode)?.icon}
               </div>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Upload Content</h2>
+                <p className="text-gray-600">Choose how you'd like to contribute</p>
+              </div>
+            </div>
             </CardContent>
-          </Card>
-        )}
+            <Card />
 
-        {/* Audio Recording */}
-        {inputMethod === 'audio' && (
-          <Card className="animate-fade-in-up">
-            <CardHeader>
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <Mic className="h-5 w-5 text-blue-600" />
-                Record Your Audio
-              </h3>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {!audioUrl && (
-                <div className="flex flex-col items-center space-y-4">
-                  <div className={`w-24 h-24 rounded-full flex items-center justify-center transition-all ${
-                    isRecording ? 'bg-red-100 animate-pulse' : 'bg-blue-100'
-                  }`}>
-                    {isRecording ? (
-                      <MicOff className="h-12 w-12 text-red-600" />
-                    ) : (
-                      <Mic className="h-12 w-12 text-blue-600" />
-                    )}
-                  </div>
-                  
-                  {isRecording && (
-                    <div className="text-center">
-                      <div className="text-2xl font-mono font-bold text-red-600">
-                        {formatTime(recordingTime)}
-                      </div>
-                      <p className="text-sm text-gray-600">Recording in progress...</p>
-                    </div>
-                  )}
+            {/* Card Content */}
+            <CardContent className="p-6">
+              {/* Upload Form Header */}
+              <div className="flex items-center mb-6">
+                {uploadOptions.find(opt => opt.type === uploadMode)?.icon}
+                <h2 className="text-xl font-semibold ml-2">Upload Content</h2>
+              </div>
 
-                  <Button
-                    onClick={isRecording ? stopRecording : startAudioRecording}
-                    className={`px-8 py-3 text-white ${
-                      isRecording 
-                        ? 'bg-red-500 hover:bg-red-600' 
-                        : 'gradient-purple hover:opacity-90'
-                    }`}
-                  >
-                    {isRecording ? (
-                      <>
-                        <Square className="h-5 w-5 mr-2" />
-                        Stop Recording
-                      </>
-                    ) : (
-                      <>
-                        <Mic className="h-5 w-5 mr-2" />
-                        Start Recording
-                      </>
-                    )}
-                  </Button>
-                </div>
-              )}
-
-              {audioUrl && (
-                <div className="space-y-4">
-                  <div className="bg-green-50 p-4 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Check className="h-5 w-5 text-green-600" />
-                        <span className="text-green-700 font-medium">Recording completed</span>
-                      </div>
-                      <span className="text-sm text-green-600">{formatTime(recordingTime)}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Button onClick={() => audioUrl && new Audio(audioUrl).play()} variant="outline" className="flex-1">
-                      <Play className="h-4 w-4 mr-2" />
-                      Play
-                    </Button>
-                    <Button onClick={() => {
-                      if (audioUrl) URL.revokeObjectURL(audioUrl);
-                      setAudioUrl(null);
-                      setAudioBlob(null);
-                      setRecordingTime(0);
-                    }} variant="outline" className="flex-1">
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Video Recording */}
-        {inputMethod === 'video' && (
-          <Card className="animate-fade-in-up">
-            <CardHeader>
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <Video className="h-5 w-5 text-red-600" />
-                Record Your Video
-              </h3>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="aspect-video bg-black rounded-lg overflow-hidden">
-                <video
-                  ref={videoRef}
-                  className="w-full h-full object-cover"
-                  muted
-                  playsInline
+              {/* Title Input */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Title *
+                </label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="Enter a title for your content"
                 />
               </div>
 
-              {!videoUrl && (
-                <div className="flex flex-col items-center space-y-4">
+              {/* Location Status */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <MapPin className="w-4 h-4 text-gray-600" />
+                  <span className="text-sm font-medium text-gray-700">Location</span>
+                </div>
+                {location ? (
+                  <div className="flex items-center gap-2 text-green-600">
+                    <Check className="w-4 h-4" />
+                    <span className="text-sm">
+                      Location: {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+                    </span>
+                  </div>
+                ) : locationError ? (
+                  <div className="flex items-center gap-2 text-red-600">
+                    <AlertCircle className="w-4 h-4" />
+                    <span className="text-sm">{locationError}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-orange-600">
+                    <AlertCircle className="w-4 h-4" />
+                    <span className="text-sm">Location required</span>
+                  </div>
+                )}
+
+                {!location && (
+                  <div className="flex gap-2 mt-3">
+                    <Button
+                      onClick={requestLocation}
+                      size="sm"
+                      className="bg-purple-600 hover:bg-purple-700"
+                    >
+                      <MapPin className="w-4 h-4 mr-1" />
+                      Get Location
+                    </Button>
+                    <Button
+                      onClick={() => setShowManualLocation(!showManualLocation)}
+                      variant="outline"
+                      size="sm"
+                    >
+                      Manual
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Manual Location Input */}
+              {showManualLocation && (
+                <Card className="border-orange-200 bg-orange-50">
+                  <CardContent className="p-4">
+                    <h3 className="font-medium text-gray-800 mb-3">Enter Location Manually</h3>
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          Latitude
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={manualLat}
+                          onChange={(e) => setManualLat(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                          placeholder="e.g., 17.3850"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          Longitude
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={manualLng}
+                          onChange={(e) => setManualLng(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                          placeholder="e.g., 78.4867"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={handleManualLocationSubmit}
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        <Check className="w-4 h-4 mr-1" />
+                        Set Location
+                      </Button>
+                      <Button
+                        onClick={() => setShowManualLocation(false)}
+                        variant="outline"
+                        size="sm"
+                      >
+                        <X className="w-4 h-4 mr-1" />
+                        Cancel
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Content Input based on type */}
+              {uploadMode === 'text' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Content *
+                  </label>
+                  <textarea
+                    value={textContent}
+                    onChange={(e) => setTextContent(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent h-32 resize-vertical"
+                    placeholder="Enter your text content here..."
+                  />
+                </div>
+              )}
+
+              {uploadMode === 'audio' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Audio Recording *
+                  </label>
+
+                  {!isRecording && !recordedBlob && (
+                    <Button
+                      onClick={() => startRecording('audio')}
+                      className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-lg"
+                    >
+                      <Mic className="w-5 h-5 mr-2" />
+                      Start Recording
+                    </Button>
+                  )}
+
                   {isRecording && (
-                    <div className="text-center">
-                      <div className="text-2xl font-mono font-bold text-red-600">
+                    <div className="text-center space-y-4">
+                      <div className="text-2xl font-mono text-red-600">
                         {formatTime(recordingTime)}
                       </div>
-                      <p className="text-sm text-gray-600">Recording in progress...</p>
+                      <Button
+                        onClick={stopRecording}
+                        className="bg-red-600 hover:bg-red-700 text-white"
+                      >
+                        <Square className="w-5 h-5 mr-2" />
+                        Stop Recording
+                      </Button>
                     </div>
                   )}
 
-                  <Button
-                    onClick={isRecording ? stopRecording : startVideoRecording}
-                    className={`px-8 py-3 text-white ${
-                      isRecording 
-                        ? 'bg-red-500 hover:bg-red-600' 
-                        : 'gradient-purple hover:opacity-90'
-                    }`}
-                  >
-                    {isRecording ? (
-                      <>
-                        <Square className="h-5 w-5 mr-2" />
-                        Stop Recording
-                      </>
-                    ) : (
-                      <>
-                        <Video className="h-5 w-5 mr-2" />
-                        Start Recording
-                      </>
-                    )}
-                  </Button>
-                </div>
-              )}
-
-              {videoUrl && (
-                <div className="space-y-4">
-                  <div className="bg-green-50 p-4 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Check className="h-5 w-5 text-green-600" />
-                        <span className="text-green-700 font-medium">Video recorded</span>
+                  {recordedBlob && audioUrl && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <span className="text-green-700 font-medium">
+                          Recording completed ({formatTime(recordingTime)})
+                        </span>
+                        <Button
+                          onClick={resetRecording}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <RotateCcw className="w-4 h-4 mr-1" />
+                          Record Again
+                        </Button>
                       </div>
-                      <span className="text-sm text-green-600">{formatTime(recordingTime)}</span>
+                      <audio controls className="w-full">
+                        <source src={audioUrl} type="audio/webm" />
+                        Your browser does not support the audio element.
+                      </audio>
                     </div>
-                  </div>
+                  )}
 
-                  <div className="flex gap-2">
-                    <Button onClick={() => {
-                      if (videoRef.current && videoUrl) {
-                        videoRef.current.src = videoUrl;
-                        videoRef.current.play();
-                      }
-                    }} variant="outline" className="flex-1">
-                      <Play className="h-4 w-4 mr-2" />
-                      Play
-                    </Button>
-                    <Button onClick={() => {
-                      if (videoUrl) URL.revokeObjectURL(videoUrl);
-                      setVideoUrl(null);
-                      setVideoBlob(null);
-                      setRecordingTime(0);
-                    }} variant="outline" className="flex-1">
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete
-                    </Button>
+                  <div className="mt-4">
+                    <div className="text-center text-gray-500 mb-2">OR</div>
+                    <label className="block">
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        onChange={handleFileSelectInternal}
+                        className="hidden"
+                      />
+                      <div className="w-full p-4 border-2 border-dashed border-gray-300 rounded-lg text-center cursor-pointer hover:border-purple-400 hover:bg-purple-50 transition-colors">
+                        <Mic className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                        <span className="text-gray-600">
+                          {selectedFile && !recordedBlob ? selectedFile.name : 'Upload Audio File'}
+                        </span>
+                      </div>
+                    </label>
                   </div>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        )}
 
-        {/* Image Upload */}
-        {inputMethod === 'image' && (
-          <Card className="animate-fade-in-up">
-            <CardHeader>
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <Image className="h-5 w-5 text-orange-600" />
-                Upload Your Image
-              </h3>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                ref={fileInputRef}
-                className="hidden"
-              />
+              {uploadMode === 'video' && (
+                <div>
+                  <h3>Video Recording *</h3>
 
-              {!imageUrl && (
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-orange-400 transition-colors"
+                  {/* Video preview - show during recording */}
+                  <video
+                    ref={videoRecordingRef}
+                    style={{
+                      width: '100%',
+                      maxWidth: '400px',
+                      display: isRecording ? 'block' : 'none',
+                      borderRadius: '8px',
+                      margin: '0 auto 16px auto',
+                      marginBottom: '16px'
+                    }}
+                    autoPlay
+                    muted
+                    playsInline
+                  />
+
+
+                  {!isRecording && !recordedBlob && (
+                    <Button
+                      onClick={() => startRecording('video')}
+                      className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-lg"
+                    >
+                      <Video className="w-5 h-5 mr-2" />
+                      Start Video Recording
+                    </Button>
+                  )}
+
+                  {isRecording && (
+                    <div className="text-center space-y-4">
+                      <div className="text-2xl font-mono text-red-600">
+                        {formatTime(recordingTime)}
+                      </div>
+                      <Button
+                        onClick={stopRecording}
+                        className="bg-red-600 hover:bg-red-700 text-white"
+                      >
+                        <Square className="w-5 h-5 mr-2" />
+                        Stop Recording
+                      </Button>
+                    </div>
+                  )}
+
+                  {recordedBlob && videoUrl && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <span className="text-green-700 font-medium">
+                          Video recorded ({formatTime(recordingTime)})
+                        </span>
+                        <Button
+                          onClick={resetRecording}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <RotateCcw className="w-4 h-4 mr-1" />
+                          Record Again
+                        </Button>
+                      </div>
+                      <video controls className="w-full max-w-md mx-auto rounded-lg">
+                        <source src={videoUrl} type="video/webm" />
+                        Your browser does not support the video element.
+                      </video>
+                    </div>
+                  )}
+
+                  <div className="mt-4">
+                    <div className="text-center text-gray-500 mb-2">OR</div>
+                    <label className="block">
+                      <input
+                        type="file"
+                        accept="video/*"
+                        onChange={handleFileSelectInternal}
+                        className="hidden"
+                      />
+                      <div className="w-full p-4 border-2 border-dashed border-gray-300 rounded-lg text-center cursor-pointer hover:border-purple-400 hover:bg-purple-50 transition-colors">
+                        <Video className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                        <span className="text-gray-600">
+                          {selectedFile && !recordedBlob ? selectedFile.name : 'Upload Video File'}
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {uploadMode === 'image' && (
+                <div>
+                  <h3>Image Capture *</h3>
+
+                  {/* Video preview for camera */}
+                  <video
+                    ref={videoRef}
+                    style={{
+                      width: '100%',
+                      maxWidth: '400px',
+                      display: isCameraActive ? 'block' : 'none',
+                      borderRadius: '8px',
+                      margin: '0 auto 16px auto',
+                      marginBottom: '16px'
+                    }}
+                    autoPlay
+                    muted
+                    playsInline
+                  />
+
+                  {/* Hidden canvas for capture */}
+                  <canvas ref={canvasRef} style={{ display: 'none' }} />
+
+                  {!isCameraActive && (
+                    <Button onClick={capturePhoto} className="w-full mb-4">
+                      <Camera className="w-4 h-4 mr-2" />
+                      Start Camera
+                    </Button>
+                  )}
+
+                  {isCameraActive && (
+                    <div className="flex gap-2 mb-4">
+                      <Button onClick={capturePhoto} className="flex-1">
+                        <Camera className="w-4 h-4 mr-2" />
+                        Take Photo
+                      </Button>
+                      <Button onClick={stopCamera} variant="outline" className="flex-1">
+                        <X className="w-4 h-4 mr-2" />
+                        Stop Camera
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Show captured image preview */}
+                  {selectedFile && (
+                    <div className="mb-4">
+                      <p className="text-sm text-gray-600 mb-2">Captured Photo:</p>
+                      <img
+                        src={URL.createObjectURL(selectedFile)}
+                        alt="Captured"
+                        style={{
+                          width: '100%',
+                          maxWidth: '400px',
+                          margin: '0 auto 16px auto',
+                          borderRadius: '8px',
+                          border: '2px solid #e5e7eb'
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* File upload option */}
+                  <div className="text-center text-gray-500 mb-2">OR</div>
+
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileSelectInternal}
+                    className="hidden"
+                    id="image-upload"
+                  />
+                  <label htmlFor="image-upload">
+                    <Button variant="outline" className="w-full" asChild>
+                      <span>
+                        <Image className="w-4 h-4 mr-2" />
+                        {selectedFile && !isCameraActive ? selectedFile.name : 'Upload Image File'}
+                      </span>
+                    </Button>
+                  </label>
+                </div>
+              )}
+
+
+
+              {/* Upload Button */}
+              <div className="flex gap-4 pt-4">
+                <Button
+                  onClick={onBack}
+                  variant="outline"
+                  className="flex-1"
                 >
-                  <Image className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600 mb-2">Click to select an image</p>
-                  <p className="text-sm text-gray-500">PNG, JPG, GIF up to 10MB</p>
-                </div>
-              )}
-
-              {imageUrl && (
-                <div className="space-y-4">
-                  <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
-                    <img
-                      src={imageUrl}
-                      alt="Uploaded"
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-
-                  <div className="bg-green-50 p-4 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <Check className="h-5 w-5 text-green-600" />
-                      <span className="text-green-700 font-medium">Image selected</span>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="flex-1">
-                      <Image className="h-4 w-4 mr-2" />
-                      Change Image
-                    </Button>
-                    <Button onClick={() => {
-                      if (imageUrl) URL.revokeObjectURL(imageUrl);
-                      setImageUrl(null);
-                      setImageFile(null);
-                    }} variant="outline" className="flex-1">
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Remove
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Submit Button */}
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
-          <Button
-            onClick={handleSubmit}
-            disabled={isSubmitting || 
-              (inputMethod === 'text' && !textContent.trim()) || 
-              (inputMethod === 'audio' && !audioBlob) ||
-              (inputMethod === 'video' && !videoBlob) ||
-              (inputMethod === 'image' && !imageFile)
-            }
-            className="w-full h-12 gradient-purple text-white hover:opacity-90 transition-opacity"
-          >
-            {isSubmitting ? "Submitting..." : "Submit Content"}
-          </Button>
-        </div>
-
-        {/* Success Message Area */}
-        <div className="h-20"></div>
-      </div>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={onUpload}
+                  disabled={uploading}
+                  className="flex-1 bg-purple-600 hover:bg-purple-700"
+                >
+                  {uploading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4 mr-2" />
+                      Upload
+                    </>
+                  )}
+                 </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
-  );
+  </div>
+);
+
 };
 
-export default ContentInput;
+      export default ContentInput;
