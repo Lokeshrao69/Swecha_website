@@ -27,10 +27,8 @@ _If applicable, add screenshots or error logs to help explain your problem._
 ---
 
 **Environment:**
-- GitLab version: `xx.xx`
 - Operating System: `Windows/Linux/macOS`
 - Browser: `Chrome/Firefox/Edge`
-- Project Name/ID: `example-project (ID: 12345)`
 
 ---
 
@@ -39,4 +37,4 @@ _Add any other context about the problem here._
 
 ---
 
-✅ _Please make sure this bug is not already reported. Check existing issues before submitting._
+

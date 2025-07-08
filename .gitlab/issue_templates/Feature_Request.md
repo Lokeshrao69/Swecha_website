@@ -35,4 +35,3 @@ _Links, screenshots, or GitLab issues that this is related to._
 
 ---
 
-🙏 _Please check for duplicate feature requests before submitting._
