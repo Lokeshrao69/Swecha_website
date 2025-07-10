@@ -1,9 +1,9 @@
-// Pause Button Added In Audio/Video
+// Pause Button Added In Audio/Video + Camera Switch Function
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, MapPin, Type, Mic, Video, Image, X, Check, AlertCircle, Camera, Square, Play, Pause, RotateCcw } from 'lucide-react';
+import { ArrowLeft, MapPin, Type, Mic, Video, Image, X, Check, AlertCircle, Camera, Square, Play, Pause, RotateCcw, RefreshCw } from 'lucide-react';
 import { toast } from "sonner";
 
 interface Category {
@@ -86,6 +86,7 @@ const ContentInput: React.FC<ContentInputProps> = ({
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [recordedChunks, setRecordedChunks] = useState<BlobPart[]>([]);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoCaptureRef = useRef<HTMLVideoElement>(null);
@@ -141,14 +142,63 @@ const ContentInput: React.FC<ContentInputProps> = ({
     };
   }, [isRecording, isPaused]);
 
-  const startRecording = async (type: 'audio' | 'video') => {
+  const switchCamera = async () => {
+    const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(newFacingMode);
+    
+    // Stop current stream
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+    }
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+    }
+
     try {
+      // Start new stream with switched camera
+      if (uploadMode === 'image' && isCameraActive) {
+        await capturePhoto(newFacingMode);
+      } else if (uploadMode === 'video' && isRecording) {
+        // For video recording, we need to restart the recording with new camera
+        const wasRecording = isRecording;
+        const wasPaused = isPaused;
+        const currentTime = recordingTime;
+        
+        // Stop current recording
+        if (mediaRecorder) {
+          mediaRecorder.stop();
+        }
+        
+        // Start new recording with new camera
+        setTimeout(() => {
+          startRecording('video', newFacingMode);
+          if (wasPaused) {
+            setTimeout(() => {
+              setRecordingTime(currentTime);
+              pauseRecording();
+            }, 100);
+          }
+        }, 100);
+      }
+      
+      toast.success(`Switched to ${newFacingMode === 'user' ? 'front' : 'rear'} camera`);
+    } catch (error) {
+      console.error('Camera switch error:', error);
+      toast.error('Failed to switch camera');
+      // Revert facing mode if switch failed
+      setFacingMode(facingMode);
+    }
+  };
+
+  const startRecording = async (type: 'audio' | 'video', customFacingMode?: 'user' | 'environment') => {
+    try {
+      const currentFacingMode = customFacingMode || facingMode;
       const constraints = type === 'audio'
         ? { audio: true }
         : {
           audio: true,
           video: {
-            facingMode: 'user',
+            facingMode: currentFacingMode,
             width: { ideal: 1280 },
             height: { ideal: 720 }
           }
@@ -243,11 +293,12 @@ const ContentInput: React.FC<ContentInputProps> = ({
     toast.success('Recording stopped');
   };
 
-  const capturePhoto = async () => {
+  const capturePhoto = async (customFacingMode?: 'user' | 'environment') => {
     try {
+      const currentFacingMode = customFacingMode || facingMode;
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: 'user',
+          facingMode: currentFacingMode,
           width: { ideal: 1280 },
           height: { ideal: 720 }
         }
@@ -618,6 +669,21 @@ const ContentInput: React.FC<ContentInputProps> = ({
                   Video Recording *
                 </label>
 
+                {/* Camera Switch Button - show when recording */}
+                {isRecording && (
+                  <div className="flex justify-center mb-4">
+                    <Button
+                      onClick={switchCamera}
+                      variant="outline"
+                      size="sm"
+                      className="bg-white/80 hover:bg-white/90 text-gray-700"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Switch to {facingMode === 'user' ? 'Rear' : 'Front'} Camera
+                    </Button>
+                  </div>
+                )}
+
                 {/* Video preview - show during recording */}
                 <video
                   ref={videoRecordingRef}
@@ -730,97 +796,141 @@ const ContentInput: React.FC<ContentInputProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Image Capture *
                 </label>
-
-                {/* Video preview for camera */}
-                <video
-                  ref={videoRef}
-                  style={{
-                    width: '100%',
-                    maxWidth: '400px',
-                    display: isCameraActive ? 'block' : 'none',
-                    borderRadius: '8px',
-                    margin: '0 auto 16px auto',
-                    marginBottom: '16px'
-                  }}
-                  autoPlay
-                  muted
-                  playsInline
-                />
-
-                {/* Hidden canvas for capture */}
-                <canvas ref={canvasRef} style={{ display: 'none' }} />
-
-                {!isCameraActive && (
-                  <Button onClick={capturePhoto} className="w-full mb-4">
-                    <Camera className="w-4 h-4 mr-2" />
-                    Start Camera
-                  </Button>
-                )}
-
+                {/* Camera Switch Button - show when camera is active */}
                 {isCameraActive && (
-                  <div className="flex gap-2 mb-4">
-                    <Button onClick={capturePhoto} className="flex-1">
-                      <Camera className="w-4 h-4 mr-2" />
-                      Take Photo
-                    </Button>
-                    <Button onClick={stopCamera} variant="outline" className="flex-1">
-                      <X className="w-4 h-4 mr-2" />
-                      Stop Camera
+                  <div className="flex justify-center mb-4">
+                    <Button
+                      onClick={switchCamera}
+                      variant="outline"
+                      size="sm"
+                      className="bg-white/80 hover:bg-white/90 text-gray-700"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Switch to {facingMode === 'user' ? 'Rear' : 'Front'} Camera
                     </Button>
                   </div>
                 )}
 
-                {/* Show captured image preview */}
-                {selectedFile && (
-                  <div className="mb-4">
-                    <p className="text-sm text-gray-600 mb-2">Captured Photo:</p>
-                    <img
-                      src={URL.createObjectURL(selectedFile)}
-                      alt="Captured"
-                      style={{
-                        width: '100%',
-                        maxWidth: '400px',
-                        margin: '0 auto 16px auto',
-                        borderRadius: '8px',
-                        border: '2px solid #e5e7eb'
-                      }}
+                {/* Camera preview and controls */}
+                <div className="text-center space-y-4">
+                  <video
+                    ref={videoRef}
+                    style={{
+                      width: '100%',
+                      maxWidth: '400px',
+                      display: isCameraActive ? 'block' : 'none',
+                      borderRadius: '8px',
+                      margin: '0 auto'
+                    }}
+                    autoPlay
+                    muted
+                    playsInline
+                  />
+                  
+                  <canvas
+                    ref={canvasRef}
+                    style={{ display: 'none' }}
+                  />
+
+                  {!isCameraActive && !selectedFile && (
+                    <Button
+                      onClick={() => capturePhoto()}
+                      className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg"
+                    >
+                      <Camera className="w-5 h-5 mr-2" />
+                      Start Camera
+                    </Button>
+                  )}
+
+                  {isCameraActive && (
+                    <div className="flex justify-center gap-2">
+                      <Button
+                        onClick={() => capturePhoto()}
+                        className="bg-blue-500 hover:bg-blue-600 text-white"
+                      >
+                        <Camera className="w-5 h-5 mr-2" />
+                        Capture Photo
+                      </Button>
+                      <Button
+                        onClick={stopCamera}
+                        variant="outline"
+                        className="bg-red-50 text-red-600 border-red-200 hover:bg-red-100"
+                      >
+                        <Square className="w-5 h-5 mr-2" />
+                        Stop Camera
+                      </Button>
+                    </div>
+                  )}
+
+                  {selectedFile && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <span className="text-green-700 font-medium">
+                          Photo captured: {selectedFile.name}
+                        </span>
+                        <Button
+                          onClick={() => {
+                            setSelectedFile(null);
+                            if (isCameraActive) {
+                              capturePhoto();
+                            }
+                          }}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <RotateCcw className="w-4 h-4 mr-1" />
+                          Take Another
+                        </Button>
+                      </div>
+                      {selectedFile && (
+                        <img
+                          src={URL.createObjectURL(selectedFile)}
+                          alt="Captured"
+                          className="w-full max-w-md mx-auto rounded-lg shadow-md"
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4">
+                  <div className="text-center text-gray-500 mb-2">OR</div>
+                  <label className="block">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileSelectInternal}
+                      className="hidden"
                     />
-                  </div>
-                )}
-
-                {/* File upload option */}
-                <div className="text-center text-gray-500 mb-2">OR</div>
-
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileSelectInternal}
-                  className="hidden"
-                  id="image-upload"
-                />
-                <label htmlFor="image-upload">
-                  <Button variant="outline" className="w-full" asChild>
-                    <span>
-                      <Image className="w-4 h-4 mr-2" />
-                      {selectedFile && !isCameraActive ? selectedFile.name : 'Upload Image File'}
-                    </span>
-                  </Button>
-                </label>
+                    <div className="w-full p-4 border-2 border-dashed border-gray-300 rounded-lg text-center cursor-pointer hover:border-purple-400 hover:bg-purple-50 transition-colors">
+                      <Image className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                      <span className="text-gray-600">
+                        {selectedFile && !isCameraActive ? selectedFile.name : 'Upload Image File'}
+                      </span>
+                    </div>
+                  </label>
+                </div>
               </div>
-)}
+            )}
 
             {/* Upload Button */}
-            <div className="flex justify-end">
+            <div className="flex justify-center">
               <Button
                 onClick={onUpload}
-                disabled={uploading || !title || !location || (!textContent && !selectedFile)}
+                disabled={
+                  uploading ||
+                  !title.trim() ||
+                  !location ||
+                  (uploadMode === 'text' && !textContent.trim()) ||
+                  (uploadMode !== 'text' && !selectedFile)
+                }
                 className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {uploading ? (
-                  <div className="flex items-center">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
                     Uploading...
-                  </div>
+                  </>
                 ) : (
                   'Upload Content'
                 )}
