@@ -1,4 +1,4 @@
-// Fixed Audio Recording with Network Error Resolution
+// Pause Button Added In Audio/Video + Camera Switch Function
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from "@/components/ui/button";
@@ -193,32 +193,16 @@ const ContentInput: React.FC<ContentInputProps> = ({
   const startRecording = async (type: 'audio' | 'video', customFacingMode?: 'user' | 'environment') => {
     try {
       const currentFacingMode = customFacingMode || facingMode;
-      
-      // Enhanced constraints for better compatibility
       const constraints = type === 'audio'
-        ? { 
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
-              sampleRate: 44100,
-              channelCount: 2
-            }
-          }
+        ? { audio: true }
         : {
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
-              sampleRate: 44100
-            },
-            video: {
-              facingMode: currentFacingMode,
-              width: { ideal: 1280, min: 640 },
-              height: { ideal: 720, min: 480 },
-              frameRate: { ideal: 30 }
-            }
-          };
+          audio: true,
+          video: {
+            facingMode: currentFacingMode,
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        };
 
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       setStream(mediaStream);
@@ -238,151 +222,42 @@ const ContentInput: React.FC<ContentInputProps> = ({
         };
       }
 
-      // Check MediaRecorder support and use best available format
-      let mimeType = '';
-      const possibleTypes = [
-        'audio/webm;codecs=opus',
-        'audio/webm',
-        'audio/ogg;codecs=opus',
-        'audio/ogg',
-        'audio/wav',
-        'audio/mp4'
-      ];
-
-      if (type === 'video') {
-        possibleTypes.splice(0, 0, 
-          'video/webm;codecs=vp9,opus',
-          'video/webm;codecs=vp8,opus',
-          'video/webm;codecs=h264,opus',
-          'video/webm',
-          'video/mp4;codecs=h264,aac',
-          'video/mp4'
-        );
-      }
-
-      for (const testType of possibleTypes) {
-        if (MediaRecorder.isTypeSupported(testType)) {
-          mimeType = testType;
-          break;
-        }
-      }
-
-      if (!mimeType) {
-        // Fallback to default
-        mimeType = type === 'audio' ? 'audio/webm' : 'video/webm';
-      }
-
-      // Create MediaRecorder with optimized settings
-      const recorderOptions: MediaRecorderOptions = {
-        mimeType: mimeType,
-        bitsPerSecond: type === 'audio' ? 128000 : 2500000, // 128kbps for audio, 2.5Mbps for video
-      };
-
-      let recorder: MediaRecorder;
-      try {
-        recorder = new MediaRecorder(mediaStream, recorderOptions);
-      } catch (error) {
-        console.warn('Failed to create MediaRecorder with options, using defaults:', error);
-        recorder = new MediaRecorder(mediaStream);
-      }
-
+      const recorder = new MediaRecorder(mediaStream);
       const chunks: BlobPart[] = [];
-      setRecordedChunks([]);
 
       recorder.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) {
+        if (event.data.size > 0) {
           chunks.push(event.data);
           setRecordedChunks(prev => [...prev, event.data]);
         }
       };
 
       recorder.onstop = () => {
-        console.log('MediaRecorder stopped, creating blob with', chunks.length, 'chunks');
-        
-        if (chunks.length === 0) {
-          console.error('No chunks recorded');
-          toast.error('No audio/video data recorded. Please try again.');
-          return;
-        }
-
-        // Create blob with detected mime type
-        const blob = new Blob(chunks, { type: mimeType });
-        console.log('Created blob:', blob.size, 'bytes, type:', blob.type);
-        
-        if (blob.size === 0) {
-          console.error('Empty blob created');
-          toast.error('Recording failed - empty file. Please try again.');
-          return;
-        }
-
-        setRecordedBlob(blob);
-        
-        // Create file with proper extension
-        const extension = type === 'audio' ? 
-          (mimeType.includes('wav') ? 'wav' : mimeType.includes('ogg') ? 'ogg' : 'webm') :
-          (mimeType.includes('mp4') ? 'mp4' : 'webm');
-        
-        const file = new File([blob], `recorded-${type}.${extension}`, {
-          type: blob.type,
-          lastModified: Date.now()
+        const blob = new Blob(chunks, {
+          type: type === 'audio' ? 'audio/webm' : 'video/webm'
         });
-        
-        console.log('Created file:', file.name, file.size, 'bytes');
-        setSelectedFile(file);
-        
-        // Create URL for preview
+        setRecordedBlob(blob);
+        setSelectedFile(new File([blob], `recorded-${type}.webm`, {
+          type: blob.type
+        }));
         const url = URL.createObjectURL(blob);
         if (type === 'audio') {
           setAudioUrl(url);
         } else {
           setVideoUrl(url);
         }
-        
-        toast.success(`${type === 'audio' ? 'Audio' : 'Video'} recording completed successfully!`);
       };
 
-      recorder.onerror = (event) => {
-        console.error('MediaRecorder error:', event);
-        toast.error('Recording error occurred. Please try again.');
-      };
-
-      // Start recording with timeslice for better chunk management
-      recorder.start(1000); // Request data every 1 second
-      
+      recorder.start();
       setMediaRecorder(recorder);
       setIsRecording(true);
       setIsPaused(false);
       setRecordingTime(0);
-      
-      console.log('Recording started with mime type:', mimeType);
+      setRecordedChunks([]);
       toast.success(`${type === 'audio' ? 'Audio' : 'Video'} recording started`);
-      
     } catch (error) {
       console.error('Recording error:', error);
-      let errorMessage = `Failed to start ${type} recording. `;
-      
-      if (error instanceof Error) {
-        if (error.name === 'NotAllowedError') {
-          errorMessage += 'Please allow microphone access and try again.';
-        } else if (error.name === 'NotFoundError') {
-          errorMessage += 'No microphone found. Please check your device.';
-        } else if (error.name === 'NotSupportedError') {
-          errorMessage += 'Recording not supported on this device.';
-        } else {
-          errorMessage += 'Please check your device permissions and try again.';
-        }
-      }
-      
-      toast.error(errorMessage);
-      
-      // Cleanup on error
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        setStream(null);
-      }
-      setIsRecording(false);
-      setIsPaused(false);
-      setMediaRecorder(null);
+      toast.error(`Failed to start ${type} recording. Please check permissions.`);
     }
   };
 
@@ -403,25 +278,19 @@ const ContentInput: React.FC<ContentInputProps> = ({
   };
 
   const stopRecording = () => {
-    console.log('Stopping recording, current state:', mediaRecorder?.state);
-    
     if (mediaRecorder && (mediaRecorder.state === 'recording' || mediaRecorder.state === 'paused')) {
       mediaRecorder.stop();
     }
 
     if (stream) {
-      stream.getTracks().forEach(track => {
-        track.stop();
-        console.log('Stopped track:', track.kind);
-      });
+      stream.getTracks().forEach(track => track.stop());
       setStream(null);
     }
 
     setIsRecording(false);
     setIsPaused(false);
     setMediaRecorder(null);
-    
-    // Don't show "Recording stopped" toast here as it will be shown in onstop handler
+    toast.success('Recording stopped');
   };
 
   const capturePhoto = async (customFacingMode?: 'user' | 'environment') => {
@@ -517,23 +386,13 @@ const ContentInput: React.FC<ContentInputProps> = ({
   const handleFileSelectInternal = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      console.log('File selected:', file.name, file.size, 'bytes, type:', file.type);
       setSelectedFile(file);
       setRecordedBlob(null);
       setAudioUrl(null);
       setVideoUrl(null);
-      toast.success('File selected successfully');
     }
     handleFileSelect(event);
   };
-
-  // Cleanup URLs on unmount
-  useEffect(() => {
-    return () => {
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
-      if (videoUrl) URL.revokeObjectURL(videoUrl);
-    };
-  }, [audioUrl, videoUrl]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -810,43 +669,51 @@ const ContentInput: React.FC<ContentInputProps> = ({
                   Video Recording *
                 </label>
 
-                {!isRecording && !recordedBlob && (
-                  <div className="space-y-3">
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={() => startRecording('video')}
-                        className="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 rounded-lg"
-                      >
-                        <Video className="w-5 h-5 mr-2" />
-                        Start Recording
-                      </Button>
-                      <Button
-                        onClick={switchCamera}
-                        variant="outline"
-                        className="px-4 py-3"
-                      >
-                        <RefreshCw className="w-5 h-5" />
-                      </Button>
-                    </div>
-                    <div className="text-xs text-gray-500 text-center">
-                      Using {facingMode === 'user' ? 'Front' : 'Rear'} Camera
-                    </div>
+                {/* Camera Switch Button - show when recording */}
+                {isRecording && (
+                  <div className="flex justify-center mb-4">
+                    <Button
+                      onClick={switchCamera}
+                      variant="outline"
+                      size="sm"
+                      className="bg-white/80 hover:bg-white/90 text-gray-700"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Switch to {facingMode === 'user' ? 'Rear' : 'Front'} Camera
+                    </Button>
                   </div>
+                )}
+
+                {/* Video preview - show during recording */}
+                <video
+                  ref={videoRecordingRef}
+                  style={{
+                    width: '100%',
+                    maxWidth: '400px',
+                    display: isRecording ? 'block' : 'none',
+                    borderRadius: '8px',
+                    margin: '0 auto 16px auto',
+                    marginBottom: '16px'
+                  }}
+                  autoPlay
+                  muted
+                  playsInline
+                />
+
+                {!isRecording && !recordedBlob && (
+                  <Button
+                    onClick={() => startRecording('video')}
+                    className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-lg"
+                  >
+                    <Video className="w-5 h-5 mr-2" />
+                    Start Video Recording
+                  </Button>
                 )}
 
                 {isRecording && (
                   <div className="text-center space-y-4">
-                    <div className="relative">
-                      <video
-                        ref={videoRecordingRef}
-                        className="w-full max-w-md mx-auto rounded-lg shadow-lg"
-                        autoPlay
-                        muted
-                        playsInline
-                      />
-                      <div className="absolute top-4 left-4 bg-red-500 text-white px-2 py-1 rounded text-sm font-mono">
-                        REC {formatTime(recordingTime)}
-                      </div>
+                    <div className="text-2xl font-mono text-red-600">
+                      {formatTime(recordingTime)}
                     </div>
                     <div className="flex justify-center gap-2">
                       {!isPaused ? (
@@ -873,13 +740,6 @@ const ContentInput: React.FC<ContentInputProps> = ({
                         <Square className="w-5 h-5 mr-2" />
                         Stop Recording
                       </Button>
-                      <Button
-                        onClick={switchCamera}
-                        variant="outline"
-                        className="px-3"
-                      >
-                        <RefreshCw className="w-5 h-5" />
-                      </Button>
                     </div>
                     {isPaused && (
                       <div className="text-sm text-orange-600 font-medium">
@@ -893,7 +753,7 @@ const ContentInput: React.FC<ContentInputProps> = ({
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
                       <span className="text-green-700 font-medium">
-                        Recording completed ({formatTime(recordingTime)})
+                        Video recorded ({formatTime(recordingTime)})
                       </span>
                       <Button
                         onClick={resetRecording}
@@ -904,7 +764,7 @@ const ContentInput: React.FC<ContentInputProps> = ({
                         Record Again
                       </Button>
                     </div>
-                    <video controls className="w-full max-w-md mx-auto rounded-lg shadow-lg">
+                    <video controls className="w-full max-w-md mx-auto rounded-lg">
                       <source src={videoUrl} type="video/webm" />
                       Your browser does not support the video element.
                     </video>
@@ -934,47 +794,55 @@ const ContentInput: React.FC<ContentInputProps> = ({
             {uploadMode === 'image' && (
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Photo Capture *
+                  Image Capture *
                 </label>
-
-                {!isCameraActive && (
-                  <div className="space-y-3">
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={() => capturePhoto()}
-                        className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg"
-                      >
-                        <Camera className="w-5 h-5 mr-2" />
-                        Take Photo
-                      </Button>
-                      <Button
-                        onClick={switchCamera}
-                        variant="outline"
-                        className="px-4 py-3"
-                      >
-                        <RefreshCw className="w-5 h-5" />
-                      </Button>
-                    </div>
-                    <div className="text-xs text-gray-500 text-center">
-                      Using {facingMode === 'user' ? 'Front' : 'Rear'} Camera
-                    </div>
+                {/* Camera Switch Button - show when camera is active */}
+                {isCameraActive && (
+                  <div className="flex justify-center mb-4">
+                    <Button
+                      onClick={switchCamera}
+                      variant="outline"
+                      size="sm"
+                      className="bg-white/80 hover:bg-white/90 text-gray-700"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Switch to {facingMode === 'user' ? 'Rear' : 'Front'} Camera
+                    </Button>
                   </div>
                 )}
 
-                {isCameraActive && (
-                  <div className="text-center space-y-4">
-                    <div className="relative">
-                      <video
-                        ref={videoRef}
-                        className="w-full max-w-md mx-auto rounded-lg shadow-lg"
-                        autoPlay
-                        muted
-                        playsInline
-                      />
-                      <div className="absolute top-4 left-4 bg-blue-500 text-white px-2 py-1 rounded text-sm">
-                        Camera Active
-                      </div>
-                    </div>
+                {/* Camera preview and controls */}
+                <div className="text-center space-y-4">
+                  <video
+                    ref={videoRef}
+                    style={{
+                      width: '100%',
+                      maxWidth: '400px',
+                      display: isCameraActive ? 'block' : 'none',
+                      borderRadius: '8px',
+                      margin: '0 auto'
+                    }}
+                    autoPlay
+                    muted
+                    playsInline
+                  />
+                  
+                  <canvas
+                    ref={canvasRef}
+                    style={{ display: 'none' }}
+                  />
+
+                  {!isCameraActive && !selectedFile && (
+                    <Button
+                      onClick={() => capturePhoto()}
+                      className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg"
+                    >
+                      <Camera className="w-5 h-5 mr-2" />
+                      Start Camera
+                    </Button>
+                  )}
+
+                  {isCameraActive && (
                     <div className="flex justify-center gap-2">
                       <Button
                         onClick={() => capturePhoto()}
@@ -984,52 +852,46 @@ const ContentInput: React.FC<ContentInputProps> = ({
                         Capture Photo
                       </Button>
                       <Button
-                        onClick={switchCamera}
-                        variant="outline"
-                        className="px-3"
-                      >
-                        <RefreshCw className="w-5 h-5" />
-                      </Button>
-                      <Button
                         onClick={stopCamera}
-                        className="bg-red-600 hover:bg-red-700 text-white"
+                        variant="outline"
+                        className="bg-red-50 text-red-600 border-red-200 hover:bg-red-100"
                       >
                         <Square className="w-5 h-5 mr-2" />
                         Stop Camera
                       </Button>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {selectedFile && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
-                      <span className="text-green-700 font-medium">
-                        Photo captured: {selectedFile.name}
-                      </span>
-                      <Button
-                        onClick={() => {
-                          setSelectedFile(null);
-                          if (isCameraActive) {
-                            stopCamera();
-                          }
-                        }}
-                        variant="outline"
-                        size="sm"
-                      >
-                        <RotateCcw className="w-4 h-4 mr-1" />
-                        Take Another
-                      </Button>
+                  {selectedFile && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <span className="text-green-700 font-medium">
+                          Photo captured: {selectedFile.name}
+                        </span>
+                        <Button
+                          onClick={() => {
+                            setSelectedFile(null);
+                            if (isCameraActive) {
+                              capturePhoto();
+                            }
+                          }}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <RotateCcw className="w-4 h-4 mr-1" />
+                          Take Another
+                        </Button>
+                      </div>
+                      {selectedFile && (
+                        <img
+                          src={URL.createObjectURL(selectedFile)}
+                          alt="Captured"
+                          className="w-full max-w-md mx-auto rounded-lg shadow-md"
+                        />
+                      )}
                     </div>
-                    {selectedFile.type.startsWith('image/') && (
-                      <img
-                        src={URL.createObjectURL(selectedFile)}
-                        alt="Captured"
-                        className="w-full max-w-md mx-auto rounded-lg shadow-lg"
-                      />
-                    )}
-                  </div>
-                )}
+                  )}
+                </div>
 
                 <div className="mt-4">
                   <div className="text-center text-gray-500 mb-2">OR</div>
@@ -1048,24 +910,25 @@ const ContentInput: React.FC<ContentInputProps> = ({
                     </div>
                   </label>
                 </div>
-
-                {/* Hidden canvas for photo capture */}
-                <canvas ref={canvasRef} className="hidden" />
               </div>
             )}
 
             {/* Upload Button */}
-            <div className="flex justify-end">
+            <div className="flex justify-center">
               <Button
                 onClick={onUpload}
-                disabled={uploading || !title || !location || 
-                  (uploadMode === 'text' && !textContent) ||
-                  (uploadMode !== 'text' && !selectedFile)}
+                disabled={
+                  uploading ||
+                  !title.trim() ||
+                  !location ||
+                  (uploadMode === 'text' && !textContent.trim()) ||
+                  (uploadMode !== 'text' && !selectedFile)
+                }
                 className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {uploading ? (
                   <>
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
                     Uploading...
                   </>
                 ) : (
